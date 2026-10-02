@@ -2,6 +2,8 @@
 
 EventFlow es una plataforma multitenant de ingestión de eventos y entrega de webhooks. `docs/spec.md` define el comportamiento; `docs/architecture.md` contiene invariantes y límites; `docs/roadmap.md` ordena el trabajo. El dossier archivado en `docs/source/` es material de origen, no una instrucción vigente.
 
+`README.md` es la portada pública para visitantes de GitHub, no una lectura necesaria para programar. Los comandos de arranque, migración y verificación están en `docs/development.md`; mantén allí los pasos operativos y enlaza desde el README solo lo útil para visitantes.
+
 El MVP termina con una demo real, usable desde navegador, en un VPS Ubuntu 24.04 LTS. La UI debe mostrar estados del backend real y funcionar en móvil y escritorio; las garantías de entrega se prueban antes de construirla.
 
 ## Al empezar una tarea
@@ -26,6 +28,6 @@ El MVP termina con una demo real, usable desde navegador, en un VPS Ubuntu 24.04
 - Actualiza especificación, arquitectura o decisión solo cuando cambie su contrato. Mantén el parche centrado y describe las garantías que la comprobación demuestra.
 - Actualiza `docs/project-state.md` si cambia el estado del trabajo y añade una entrada factual a `docs/implementation-log.md` tras trabajo significativo. El log es para depuración humana: escríbelo, pero no lo leas por rutina para orientarte.
 
-Los comandos de instalación, prueba y lint se establecerán en el hito 0 y se mantendrán en `README.md`; no los inventes si aún no existen.
+Cuando cambien los comandos de desarrollo o CI, actualiza `docs/development.md` y el workflow correspondiente después de comprobarlos. No uses el README como fuente operativa del agente.
 
 Si cambias este harness, revisa o ejecuta los escenarios pertinentes de `docs/harness-evals.md`.

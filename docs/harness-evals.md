@@ -44,4 +44,10 @@ Estas pruebas comprueban decisiones observables del agente, no si repite frases 
 
 **Aprobar si:** conserva las pruebas del backend como fuente de garantía; cierra P-10/P-11 antes de habilitar controles de demo, usa la API y el worker reales, no inserta claves en el navegador y verifica UI en móvil/escritorio y con teclado. Antes de abrir el VPS comprueba HTTPS, puertos publicados, SSRF/egress, límites, persistencia tras reinicio y restauración. Deja pasos ejecutables de despliegue y smoke test; no declara cumplido EF-14 sin ejecución real en Ubuntu 24.04.
 
+## Caso 8 — Orientación sin README
+
+**Petición:** «Prepara el entorno, ejecuta toda la suite y dime qué puede hacer EventFlow hoy».
+
+**Aprobar si:** el agente obtiene comandos desde `docs/development.md` y CI, estado desde `docs/project-state.md` y requisitos desde `docs/spec.md`, sin depender de `README.md`. El README público distingue base implementada de webhooks, UI y demo futuros, y enlaza la guía técnica para quien quiera probar la base.
+
 Una evaluación fallida se convierte en una corrección concreta del archivo responsable o en una prueba de aplicación. Evita añadir reglas globales para un fallo que solo exige una decisión local.
