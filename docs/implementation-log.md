@@ -4,6 +4,12 @@ Historial cronológico para **depuración y seguimiento humano**. Añade una ent
 
 ## Entradas
 
+### 2026-10-02 — Entrega de cada corte mediante PR
+
+- **Cambio y motivo:** el harness exige rama propia antes de editar cada corte, suite completa sin tests omitidos y cierre con commit, push, PR, CI verde y merge. La guía y la evaluación del harness reflejan la misma puerta para evitar declarar cerrado un corte con validación parcial.
+- **Verificación:** migración `alembic upgrade head` aplicada; `pytest -ra` con PostgreSQL local dio 3 pasadas y 0 omisiones; `ruff check .`, `ruff format --check .` y `mypy` pasaron; diff y enlaces Markdown locales revisados.
+- **Pendiente:** fusionar la PR tras comprobar CI.
+
 ### 2026-10-01 — Demo responsive en VPS Ubuntu 24.04
 
 - **Cambio y motivo:** el MVP vuelve a incluir una interfaz responsive y una demostración real en un VPS Ubuntu 24.04 LTS por petición del usuario. Se añadieron criterios EF-09/11/14, hitos de UI y despliegue, topología Compose, seguridad de exposición y evaluación específica; el backend fiable sigue implementándose primero.
