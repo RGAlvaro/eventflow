@@ -3,7 +3,7 @@
 - Rama: `feat/first-webhook-delivery`.
 - Esquema Alembic y modelos: `api_keys`, `endpoints`, `subscriptions`, `events`, `deliveries`, `delivery_attempts`, `outbox_messages`, todas las filas de dominio con `organization_id`. UUID v4, UTC y JSONB. Restricciones de unicidad para clave de idempotencia por organización, suscripción exacta, evento/endpoint y número de intento.
 - API y servicio de ingesta: clave de publicación de fixture guardada solo como hash, límite de cuerpo, validación y transacción única. La API solo devuelve `202` tras commit. Errores estables con `request_id`.
-- Despachador y worker Celery: outbox recuperable, aviso duplicable, reclamo con lease PostgreSQL, intento y reconciliación de trabajo pendiente/vencido. P-04 se cierra antes de implementarlos.
+- Despachador y worker Celery: outbox recuperable, aviso duplicable, reclamo con lease PostgreSQL, intento y reconciliación de trabajo pendiente/vencido. P-04 fija lease de 60 s sin renovación, plazo HTTP total de 20 s, límite duro de tarea de 30 s y revisión cada 10 s. Los parámetros Celery y los ensayos de recuperación están en `docs/decisions.md`.
 - HTTP saliente: política SSRF y conexión fijada a IP validada, sin redirecciones ni proxies de entorno; receptor local explícito solo en pruebas. P-03 se cierra antes del primer envío. Firma HMAC sobre bytes exactos y límites de tiempo/concurrencia global.
 - Pruebas: migración en PostgreSQL vacío; transacción y tenant; integración con Redis y receptor controlado; broker caído, aviso perdido y lease vencido. CI y `docs/development.md` se actualizan cuando cambien comandos.
 

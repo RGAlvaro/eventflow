@@ -8,6 +8,13 @@ Cada entrada debe permitir reconstruir **qué cambió y por qué**, **qué pasos
 
 ## Entradas
 
+### 2026-10-02 — Decisión P-04 sobre recuperación del worker
+
+- **Cambio y motivo:** se cerró el diseño P-04 para poder implementar el primer worker del hito 1. Un *lease* es una reserva temporal registrada en PostgreSQL: el worker recibe un token al reclamar una entrega y solo puede confirmar su resultado mientras conserve esa reserva. Se eligieron 60 segundos sin renovación inicial, con plazo total de envío HTTP de 20 segundos y límite duro de tarea de 30 segundos. El margen permite que una tarea normal termine antes de que otro worker reclame la entrega; si la implementación no consigue acotar todo el trabajo, habrá que revisar esos valores antes de enviar webhooks.
+- **Procedimiento y criterio:** un reconciliador consultará PostgreSQL cada 10 segundos para recuperar entregas pendientes, reintentos debidos y reservas vencidas. Celery confirmará la tarea después de ejecutarla (`acks_late`), reservará como máximo un aviso por proceso (`prefetch_multiplier=1`) y usará visibilidad Redis de 300 segundos. Se mantienen la confirmación de tareas fallidas y la opción de reencolar por muerte del proceso desactivada. Esta última puede causar ciclos de caídas; además, Celery puede confirmar la tarea aunque muera el proceso hijo. Por ello, el reconciliador es el mecanismo de recuperación y los avisos duplicados deben resultar inocuos gracias al reclamo condicional de PostgreSQL. La planificación de reintentos permanece en la base, no en temporizadores de Celery.
+- **Verificación:** se cotejó la decisión con las columnas `lease_token` y `lease_expires_at` existentes, el contrato de `docs/architecture.md`, el plan del corte y la documentación oficial de Celery sobre confirmación, pérdida de worker, prefetch y visibilidad Redis. Esta revisión respalda la coherencia del diseño; todavía no demuestra el comportamiento de un worker, porque aún no existe. No se ejecutaron pruebas funcionales por tratarse de una decisión documental.
+- **Pendiente:** implementar despachador, worker y reconciliador; ensayar con PostgreSQL y Redis reales una caída abrupta, un aviso perdido, avisos duplicados y un lease vencido. Esas pruebas validarán o forzarán a ajustar los plazos antes de cerrar el corte.
+
 ### 2026-10-02 — Registro técnico comprensible para un desarrollador junior
 
 - **Cambio y motivo:** se precisaron `AGENTS.md`, la skill `eventflow-slice` y este registro para que las futuras entradas expliquen las decisiones técnicas con un nivel apto para un desarrollador junior. El proyecto sirve como demostración en entrevistas; por ello, además de saber que una prueba pasó, el autor necesita comprender qué propiedad verificó y por qué importa.
