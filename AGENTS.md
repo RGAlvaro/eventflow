@@ -8,6 +8,7 @@ El MVP termina con una demo real, usable desde navegador, en un VPS Ubuntu 24.04
 
 - Consulta `docs/project-state.md` para ubicar trabajo activo y siguiente paso; identifica el requisito y el hito afectado. Inspecciona el código y las pruebas existentes antes de modificarlo.
 - Para una funcionalidad o cambio transversal, usa la skill `eventflow-slice` y deja especificación, plan breve, tareas y criterios de aceptación en `docs/work/`. Para una corrección pequeña, documenta causa y verificación en la entrega sin abrir artefactos innecesarios.
+- Antes de modificar un corte, crea una rama Git propia desde `main` actualizado. Sigue el cierre de `eventflow-slice`: aceptación cumplida, suite completa sin fallos ni omisiones, commit, push, PR, CI verde y merge. Si alguna puerta falla o no puede ejecutarse, mantén abierto el corte y registra el bloqueo.
 - Si una decisión abierta bloquea el diseño, consulta `docs/decisions.md`; registra la decisión y su motivo antes de implementarla. No tomes las etiquetas `DECIDED` del dossier como autoridad automática.
 
 ## Invariantes

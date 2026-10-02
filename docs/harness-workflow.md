@@ -1,6 +1,6 @@
 # Cómo funciona el harness de EventFlow
 
-Esta guía describe **el flujo de trabajo previsto**, desde pedir una funcionalidad hasta declarar cerrado un corte. El proyecto todavía contiene especificación e instrucciones, no una aplicación ejecutable. Por eso distingue entre comprobaciones disponibles hoy y pruebas que se incorporarán durante los hitos.
+Esta guía describe **el flujo de trabajo previsto**, desde pedir una funcionalidad hasta declarar cerrado un corte. El hito 0 ya aporta una API mínima y comprobaciones backend; otros componentes y pruebas llegarán en hitos posteriores.
 
 **Corte** significa una porción acotada de trabajo que produce un resultado observable de extremo a extremo. Puede cubrir una parte de un hito, varios requisitos EF y varias tareas de código, pruebas y documentación. Por ejemplo, «aceptar `order.created`, guardarlo y entregar un webhook firmado al receptor de prueba» es un corte; «crear el modelo Event» es solo una tarea dentro de él.
 
@@ -10,7 +10,7 @@ El harness mantiene una cadena de trazabilidad:
 
 ```text
 Petición → requisito EF → especificación del corte → plan → tareas
-        → código y pruebas → revisión → comparación con aceptación → entrega
+        → rama Git → código y pruebas → revisión → aceptación → PR y CI → merge
 ```
 
 La regla de producto que atraviesa esa cadena es que un evento aceptado debe permanecer recuperable y poder convertirse en una entrega webhook firmada, incluso si Redis o un worker fallan. `AGENTS.md` recuerda las invariantes en cada sesión; los documentos y skills añaden detalle solo cuando la tarea lo requiere.
@@ -20,10 +20,10 @@ La regla de producto que atraviesa esa cadena es que un evento aceptado debe per
 | Escala | Qué representa | Ejemplo | Cuándo se cierra |
 | --- | --- | --- | --- |
 | **Hito** | Una etapa del producto con una puerta de salida en `docs/roadmap.md`. | Hito 1: primer recorrido de entrega. | Cuando la evidencia exigida por su puerta está disponible. Puede requerir varios cortes. |
-| **Corte** | Una entrega acotada y observable de extremo a extremo, especificada en `docs/work/<slug>/`. | Aceptar `order.created`, persistirlo y entregar un webhook firmado al receptor de prueba. | Cuando pasan sus criterios de aceptación y la revisión de riesgos aplicable. No basta con completar la lista de tareas. |
+| **Corte** | Una entrega acotada y observable de extremo a extremo, especificada en `docs/work/<slug>/`. | Aceptar `order.created`, persistirlo y entregar un webhook firmado al receptor de prueba. | Cuando pasan aceptación, suite completa y CI, y su PR queda fusionada. No basta con completar la lista de tareas. |
 | **Tarea** | Una unidad de implementación o comprobación dentro del corte. | Crear la migración de `Delivery` y probarla. | Cuando se ha realizado y verificado según `tasks.md`. |
 
-Un corte puede cubrir varios requisitos EF y parte de un hito. Si un corte revela trabajo adicional, se registra en sus tareas o se abre otro corte; no se declara terminado por tener código escrito. Para un bug localizado, la vía breve descrita abajo puede sustituir los tres documentos de corte.
+Un corte puede cubrir varios requisitos EF y parte de un hito. Si un corte revela trabajo adicional, se registra en sus tareas o se abre otro corte; no se declara terminado por tener código escrito. Para un bug localizado, la vía breve descrita abajo puede sustituir los tres documentos de corte. En ambos casos, si se trata de un corte entregable, rige la misma puerta Git y de verificación.
 
 ### Dónde queda el plan, el presente y la historia
 
@@ -68,9 +68,15 @@ Para una funcionalidad o un cambio transversal se usa [$eventflow-slice](../.age
 
 `docs/work/` todavía no existe porque se crea con el primer corte amplio. Un bug localizado sigue una vía más corta: causa, corrección y verificación, sin producir tres documentos por rutina. Una decisión abierta se registra en `docs/decisions.md` con motivo y prueba antes de codificar la parte dependiente.
 
-## 3. Implementar, comprobar y converger
+## 3. Rama, implementación y cierre
+
+Antes de cambiar archivos, comprueba el árbol de trabajo, actualiza `main` y crea una rama propia para el corte. Registra la rama activa en `project-state.md`. Si hay cambios previos de otra persona, aíslalos en un worktree o rama sin alterarlos.
 
 El agente implementa un grupo pequeño de tareas, actualiza `tasks.md` y ejecuta las comprobaciones que **ya existan** en el repositorio. Si cambia persistencia, añade una migración Alembic y prueba su aplicación. Si toca entregas o seguridad, prepara pruebas de los fallos relevantes, no solo del caso feliz. Al final compara código y resultados con los escenarios de `docs/work/<slug>/spec.md` y los requisitos EF originales. Si encuentra un hueco, lo añade a `tasks.md`, lo corrige y repite la comprobación. Esto es la fase de convergencia: el corte no se cierra porque todas las tareas estén marcadas, sino porque la conducta exigida se observa.
+
+La verificación de cierre ejecuta la **suite completa**, no solo los tests de los archivos modificados: todos los tests disponibles, lint, formato, tipos, migraciones y escenarios de aceptación aplicables. Arranca los servicios requeridos para que los tests de integración se ejecuten; un `skip` por falta de PostgreSQL, Redis u otra dependencia cuenta como puerta pendiente. Usa los comandos vigentes del `README.md` y los jobs de `.github/workflows/`. Si cualquier paso falla, se omite o no se puede ejecutar, corrige o registra el bloqueo y mantén el corte abierto.
+
+Solo tras esa verificación, revisa el diff, haz commit y push de la rama y abre una PR a `main`. Espera CI y las revisiones exigidas; si fallan, corrige en la rama y repite la verificación. Fusiona la PR al quedar todo verde, actualiza `main` local y confirma que contiene el cambio. Si falta acceso para push, PR o merge, deja la PR o la rama abierta y refleja la situación en `project-state.md` y el log. El estado «cerrado» exige el merge, no solo un commit local.
 
 Al terminar trabajo significativo, actualiza la foto en `docs/project-state.md` y añade una entrada a `docs/implementation-log.md` con cambio, motivo, validaciones reales y pendientes. El log ayuda a una persona a reconstruir qué pasó; no es una lista de instrucciones ni una fuente que Codex deba releer en cada sesión.
 
@@ -96,11 +102,12 @@ La puerta de cada hito en `docs/roadmap.md` decide **cuándo** debe existir esa 
 
 1. Pides: «Usa `$eventflow-slice` para el primer recorrido `order.created` del hito 1».
 2. El agente lee EF-02/04/05, arquitectura y hoja de ruta; examina backend y tests. Si va a aceptar URLs arbitrarias, resuelve antes P-03 (SSRF). Puede empezar con el receptor HTTP local aislado de pruebas.
-3. Crea `docs/work/primer-webhook/spec.md`, `plan.md` y `tasks.md`. La aceptación incluye: `202` solo después del commit, firma verificable, entrega exitosa y trabajo recuperable si Redis falla tras aceptar el evento o se pierde un aviso ya publicado.
-4. Cierra P-04 antes del primer worker. Implementa API, transacción, outbox, despachador, reclamo/lease mínimo, reconciliador, worker y receptor de prueba en cambios revisables; añade migraciones y pruebas correspondientes.
-5. Ejecuta pruebas unitarias, de integración con PostgreSQL/Redis y de extremo a extremo disponibles; pasa lint y tipos si ya existen. Anota fallos de entorno y tareas incompletas.
-6. Pide la revisión de fiabilidad. Corrige hallazgos y compara el resultado con cada criterio del corte y la puerta del hito 1.
-7. Actualiza `tasks.md`, decisiones y `docs/project-state.md`; añade una entrada humana a `docs/implementation-log.md`. Entrega un resumen con requisitos EF cubiertos, archivos, comandos/resultados, garantías demostradas y límites pendientes.
+3. Actualiza `main`, crea la rama del corte antes de editar y la registra como activa en `project-state.md`.
+4. Crea `docs/work/primer-webhook/spec.md`, `plan.md` y `tasks.md`. La aceptación incluye: `202` solo después del commit, firma verificable, entrega exitosa y trabajo recuperable si Redis falla tras aceptar el evento o se pierde un aviso ya publicado.
+5. Cierra P-04 antes del primer worker. Implementa API, transacción, outbox, despachador, reclamo/lease mínimo, reconciliador, worker y receptor de prueba en cambios revisables; añade migraciones y pruebas correspondientes.
+6. Ejecuta todos los tests disponibles, incluidos los de integración con PostgreSQL/Redis y los de extremo a extremo; pasa lint, formato y tipos. Resuelve omisiones y fallos antes del cierre.
+7. Pide la revisión de fiabilidad. Corrige hallazgos y compara el resultado con cada criterio del corte y la puerta del hito 1.
+8. Actualiza `tasks.md`, decisiones y `docs/project-state.md`; añade una entrada humana a `docs/implementation-log.md`. Haz commit y push, abre la PR, espera CI y revisiones, fusiónala y sincroniza `main`. Entrega un resumen con requisitos EF cubiertos, archivos, comandos/resultados, enlace de PR, garantías demostradas y límites pendientes.
 
 El hito 2 repite este ciclo para reintentos, duplicados, concurrencia, límites de salida, dead letter y replay. Los hitos posteriores añaden autorización backend, límites de ingesta, interfaz responsive para ejecutar escenarios y medición sin perder las garantías ya demostradas. El cierre del MVP exige repetir la demo en un VPS Ubuntu 24.04 LTS. Solo la matriz completa de miembros/roles queda como ampliación opcional.
 
