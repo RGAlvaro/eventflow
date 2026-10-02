@@ -51,3 +51,9 @@ Historial cronológico para **depuración y seguimiento humano**. Añade una ent
 - **Cambio y motivo:** se creó el primer corte `backend-foundation`: proyecto Python con `uv.lock`, API FastAPI, configuración, health checks, modelo/migración de organizaciones, Compose, imagen y workflow CI. P-01 y P-02 quedaron cerradas para que instalación y pruebas usen versiones fijas y PostgreSQL real.
 - **Verificación:** `uv sync --locked` pasó; `alembic upgrade head` aplicó la revisión en PostgreSQL vacío; `pytest` con `EVENTFLOW_TEST_DATABASE_URL` dio 3 pasadas; `ruff check .`, `ruff format --check .` y `mypy` pasaron; `docker compose up -d --build --wait api` y `curl` a `/health/live` y `/health/ready` pasaron.
 - **Pendiente:** observar la primera ejecución del workflow CI tras publicar el repositorio. El hito 1 implementará ingesta, outbox y entrega firmada; estas garantías todavía no existen.
+
+### 2026-10-02 — Repositorio público y cierre del hito 0
+
+- **Cambio y motivo:** se creó `RGAlvaro/eventflow` público y se subió el primer commit para conservar y compartir los avances. El corte `backend-foundation` se cerró tras verificar CI.
+- **Verificación:** `gh repo view` confirmó visibilidad pública y rama `main`; GitHub Actions `Backend` run 36980088086 pasó instalación, migración en PostgreSQL, pruebas, Ruff y mypy.
+- **Pendiente:** iniciar hito 1; todavía no existe ingesta ni entrega de webhooks.
