@@ -6,7 +6,7 @@ El resultado que guía los hitos es **aceptar un evento y entregar un webhook fi
 
 ## Hito 0 — Base backend reproducible
 
-Crear backend FastAPI mínimo, configuración por entorno, PostgreSQL/Redis locales, Alembic, pruebas, Ruff, tipos y CI básica. Fijar P-01 y P-02. Documentar en `README.md` únicamente comandos que ya funcionen. Mantener el entorno local compatible con la topología Compose prevista para el VPS; el frontend se construye en el hito 4.
+Crear backend FastAPI mínimo, configuración por entorno, PostgreSQL/Redis locales, Alembic, pruebas, Ruff, tipos y CI básica. Fijar P-01 y P-02. Documentar en `docs/development.md` únicamente comandos que ya funcionen. Mantener el entorno local compatible con la topología Compose prevista para el VPS; el frontend se construye en el hito 4.
 
 **Puerta:** una copia limpia instala dependencias, inicia la API, aplica una migración a PostgreSQL vacío y supera las comprobaciones backend locales y de CI.
 
@@ -38,7 +38,7 @@ Completar API de consulta paginada para eventos, entregas e intentos; métricas,
 
 Benchmark reproducible de ingesta, entrega y receptor fallido; documentar entorno, percentiles, throughput, cuello de botella y cambio medido. Ensayar un recorrido de demostración breve desde un entorno local limpio, con datos reiniciables y sin preparación manual de PostgreSQL. Dimensionar el VPS a partir de esa evidencia y cerrar P-08 antes del despliegue.
 
-**Puerta:** EF-12 y siete escenarios de `spec.md` reproducibles; README explica garantías y límites con evidencia y permite repetir la demo desde la interfaz.
+**Puerta:** EF-12 y siete escenarios de `spec.md` reproducibles; el README público resume garantías y límites con evidencia y `docs/development.md` permite repetir la demo desde la interfaz.
 
 ## Hito 6 — Demo en VPS Ubuntu 24.04 LTS
 

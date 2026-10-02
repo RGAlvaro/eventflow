@@ -43,7 +43,7 @@ Inicia Codex en la raíz de EventFlow o en una subcarpeta del repositorio Git. C
 | Archivo | Cuándo entra en juego | Para qué sirve |
 | --- | --- | --- |
 | [AGENTS.md](../AGENTS.md) | Codex lo carga al iniciar. | Invariantes que aplican a casi toda tarea: durabilidad, aislamiento, duplicados, SSRF, secretos y cierre con pruebas. |
-| [README.md](../README.md) | Se consulta al orientarse o buscar comandos. | Mapa del proyecto y comandos **cuando existan**. |
+| [development.md](development.md) | Al preparar el entorno o ejecutar verificaciones. | Comandos de instalación, arranque, migración y suite completa. |
 | [docs/spec.md](spec.md) | Al definir o comprobar comportamiento. | Requisitos EF-01…EF-14, criterios de aceptación y escenarios finales. Es la referencia funcional vigente. |
 | [docs/architecture.md](architecture.md) | Al diseñar datos, procesos, seguridad o fallos. | Contratos técnicos: outbox, fuente de verdad, leases, reintentos, tenant y SSRF. |
 | [docs/roadmap.md](roadmap.md) | Al seleccionar y cerrar un hito. | Orden de implementación y puerta observable de cada hito. |
@@ -52,7 +52,7 @@ Inicia Codex en la raíz de EventFlow o en una subcarpeta del repositorio Git. C
 | [docs/decisions.md](decisions.md) | Cuando una decisión afecta la implementación. | Decisiones D ya adoptadas y cuestiones P pendientes con el momento en que deben cerrarse. |
 | [docs/source/eventflow_project_dossier.md](source/eventflow_project_dossier.md) | Solo para rastrear la propuesta original. | Material archivado; sus etiquetas `DECIDED` no prevalecen sobre la especificación revisada. |
 
-Los documentos enlazados **no se cargan todos automáticamente**. `AGENTS.md` y las skills indican qué consultar. Esto evita que el dossier extenso consuma contexto en cada petición. La [documentación de OpenAI sobre AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md) explica el descubrimiento; la [guía de skills](https://learn.chatgpt.com/docs/build-skills) describe su carga progresiva.
+Los documentos enlazados **no se cargan todos automáticamente**. `AGENTS.md` y las skills indican qué consultar; el README público no forma parte de la ruta operativa del agente. Esto evita que el dossier extenso consuma contexto en cada petición. La [documentación de OpenAI sobre AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md) explica el descubrimiento; la [guía de skills](https://learn.chatgpt.com/docs/build-skills) describe su carga progresiva.
 
 ## 2. De una petición a una especificación del corte
 
@@ -66,7 +66,7 @@ Para una funcionalidad o un cambio transversal se usa [$eventflow-slice](../.age
 | `plan.md` | ¿Qué componentes y datos cambian, qué migración o decisión se necesita y cómo se comprobará? |
 | `tasks.md` | ¿Qué unidades pequeñas de código, pruebas y documentación quedan pendientes o hechas? |
 
-`docs/work/` todavía no existe porque se crea con el primer corte amplio. Un bug localizado sigue una vía más corta: causa, corrección y verificación, sin producir tres documentos por rutina. Una decisión abierta se registra en `docs/decisions.md` con motivo y prueba antes de codificar la parte dependiente.
+`docs/work/` contiene el corte cerrado `backend-foundation` y alojará los siguientes cortes amplios. Un bug localizado sigue una vía más corta: causa, corrección y verificación, sin producir tres documentos por rutina. Una decisión abierta se registra en `docs/decisions.md` con motivo y prueba antes de codificar la parte dependiente.
 
 ## 3. Rama, implementación y cierre
 
@@ -74,7 +74,7 @@ Antes de cambiar archivos, comprueba el árbol de trabajo, actualiza `main` y cr
 
 El agente implementa un grupo pequeño de tareas, actualiza `tasks.md` y ejecuta las comprobaciones que **ya existan** en el repositorio. Si cambia persistencia, añade una migración Alembic y prueba su aplicación. Si toca entregas o seguridad, prepara pruebas de los fallos relevantes, no solo del caso feliz. Al final compara código y resultados con los escenarios de `docs/work/<slug>/spec.md` y los requisitos EF originales. Si encuentra un hueco, lo añade a `tasks.md`, lo corrige y repite la comprobación. Esto es la fase de convergencia: el corte no se cierra porque todas las tareas estén marcadas, sino porque la conducta exigida se observa.
 
-La verificación de cierre ejecuta la **suite completa**, no solo los tests de los archivos modificados: todos los tests disponibles, lint, formato, tipos, migraciones y escenarios de aceptación aplicables. Arranca los servicios requeridos para que los tests de integración se ejecuten; un `skip` por falta de PostgreSQL, Redis u otra dependencia cuenta como puerta pendiente. Usa los comandos vigentes del `README.md` y los jobs de `.github/workflows/`. Si cualquier paso falla, se omite o no se puede ejecutar, corrige o registra el bloqueo y mantén el corte abierto.
+La verificación de cierre ejecuta la **suite completa**, no solo los tests de los archivos modificados: todos los tests disponibles, lint, formato, tipos, migraciones y escenarios de aceptación aplicables. Arranca los servicios requeridos para que los tests de integración se ejecuten; un `skip` por falta de PostgreSQL, Redis u otra dependencia cuenta como puerta pendiente. Usa los comandos vigentes de `docs/development.md` y los jobs de `.github/workflows/`. Si cualquier paso falla, se omite o no se puede ejecutar, corrige o registra el bloqueo y mantén el corte abierto.
 
 Solo tras esa verificación, revisa el diff, haz commit y push de la rama y abre una PR a `main`. Espera CI y las revisiones exigidas; si fallan, corrige en la rama y repite la verificación. Fusiona la PR al quedar todo verde, actualiza `main` local y confirma que contiene el cambio. Si falta acceso para push, PR o merge, deja la PR o la rama abierta y refleja la situación en `project-state.md` y el log. El estado «cerrado» exige el merge, no solo un commit local.
 
@@ -113,6 +113,6 @@ El hito 2 repite este ciclo para reintentos, duplicados, concurrencia, límites 
 
 ## 5. Cómo se evalúa el propio harness
 
-[docs/harness-evals.md](harness-evals.md) contiene siete situaciones para sesiones nuevas de Codex, incluidas la recuperación tras fallo del broker, los límites de salida y la demo visual en VPS. Se revisa si el agente tomó decisiones correctas y produjo evidencia; no se aprueba por recitar instrucciones. Estos casos se usan al cambiar el harness, de forma selectiva según el alcance. Aún no se han ejecutado como una suite automatizada ni sustituyen los tests de la aplicación.
+[docs/harness-evals.md](harness-evals.md) contiene ocho situaciones para sesiones nuevas de Codex, incluidas la recuperación tras fallo del broker, los límites de salida, la demo visual en VPS y la orientación sin README. Se revisa si el agente tomó decisiones correctas y produjo evidencia; no se aprueba por recitar instrucciones. Estos casos se usan al cambiar el harness, de forma selectiva según el alcance. Aún no se han ejecutado como una suite automatizada ni sustituyen los tests de la aplicación.
 
 En resumen: `AGENTS.md` mantiene reglas siempre presentes; `spec.md` dice **qué** debe ocurrir; `architecture.md` restringe **cómo** preservar las garantías; `roadmap.md` ordena **cuándo** abordar cada hito; `project-state.md` dice **dónde estamos ahora**; `implementation-log.md` explica a una persona **qué se hizo**; las skills guían la ejecución y revisión, y las pruebas aportan evidencia para cerrar cada corte.

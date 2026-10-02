@@ -4,6 +4,12 @@ Historial cronológico para **depuración y seguimiento humano**. Añade una ent
 
 ## Entradas
 
+### 2026-10-02 — README público y guía operativa separada
+
+- **Cambio y motivo:** `README.md` presenta el objetivo y el estado real del proyecto a visitantes; los comandos de instalación, arranque, migración y pruebas pasan a `docs/development.md`. `AGENTS.md`, la skill, la guía del harness y el roadmap apuntan a la guía operativa para que el agente no dependa del README. Se añadió un caso de evaluación de esa ruta.
+- **Verificación:** `alembic upgrade head` pasó en PostgreSQL local; `pytest -ra` dio 3 pasadas y 0 omisiones; `ruff check .`, `ruff format --check .` y `mypy` pasaron. Se comprobaron 25 enlaces locales y el frontmatter de la skill; el recorrido del caso 8 llega de `AGENTS.md` a `docs/development.md`.
+- **Pendiente:** confirmar CI y fusionar la PR de este cambio.
+
 ### 2026-10-02 — Entrega de cada corte mediante PR
 
 - **Cambio y motivo:** el harness exige rama propia antes de editar cada corte, suite completa sin tests omitidos y cierre con commit, push, PR, CI verde y merge. La guía y la evaluación del harness reflejan la misma puerta para evitar declarar cerrado un corte con validación parcial.
