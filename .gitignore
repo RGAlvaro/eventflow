@@ -1,0 +1,25 @@
+# Credenciales y configuración local
+.env
+.env.*
+!.env.example
+.codex/config.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+
+# Editor y SO
+.idea/
+.vscode/
+.DS_Store

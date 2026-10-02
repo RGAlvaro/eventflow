@@ -1,0 +1,45 @@
+name: Backend
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: eventflow
+          POSTGRES_USER: eventflow
+          POSTGRES_PASSWORD: eventflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eventflow -d eventflow"
+          --health-interval 2s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 5s --health-retries 20
+    env:
+      EVENTFLOW_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@localhost:5432/eventflow
+      EVENTFLOW_TEST_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@localhost:5432/eventflow
+      EVENTFLOW_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run --locked alembic upgrade head
+      - run: uv run --locked pytest
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked mypy
