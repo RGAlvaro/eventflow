@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         pattern=r"^postgresql\+asyncpg://",
     )
     redis_url: str = Field(default="redis://localhost:6379/0", pattern=r"^rediss?://")
+    max_event_bytes: int = Field(default=256 * 1024, gt=0)
 
 
 @lru_cache

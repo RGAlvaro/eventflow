@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Request, Response, status
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from eventflow.api import ApiError, new_request_id, router
 from eventflow.config import get_settings
 from eventflow.db import make_engine
 
@@ -36,6 +38,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="EventFlow", lifespan=lifespan)
+app.include_router(router)
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+    request.state.request_id = new_request_id()
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = str(request.state.request_id)
+    return response
+
+
+@app.exception_handler(ApiError)
+async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.code,
+            "message": exc.message,
+            "request_id": str(request.state.request_id),
+        },
+    )
 
 
 @app.get("/health/live")

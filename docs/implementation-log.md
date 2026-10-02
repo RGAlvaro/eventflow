@@ -69,3 +69,9 @@ Historial cronológico para **depuración y seguimiento humano**. Añade una ent
 - **Cambio y motivo:** se creó `RGAlvaro/eventflow` público y se subió el primer commit para conservar y compartir los avances. El corte `backend-foundation` se cerró tras verificar CI.
 - **Verificación:** `gh repo view` confirmó visibilidad pública y rama `main`; GitHub Actions `Backend` run 36980088086 pasó instalación, migración en PostgreSQL, pruebas, Ruff y mypy.
 - **Pendiente:** iniciar hito 1; todavía no existe ingesta ni entrega de webhooks.
+
+### 2026-10-02 — Inicio del hito 1 en rama propia
+
+- **Cambio y motivo:** se abrió `feat/first-webhook-delivery` desde `main` actualizado. Se preparó el corte con escenarios EF-02/04/05/08 y se añadió esquema tenant de claves, endpoints, suscripciones, eventos, entregas, intentos y outbox. La API de ingesta usa clave de publicación de fixture, valida tamaño/tipo/JSON y confirma evento, entregas y outbox en una transacción sin depender de Redis.
+- **Verificación:** `alembic upgrade head` aplicó la migración en PostgreSQL; `alembic check` no detectó diferencias; `pytest -ra` con PostgreSQL dio 5 pasadas y ninguna omitida; `ruff check .`, `ruff format --check .` y `mypy` pasaron. La prueba de integración cubre aislamiento de suscripciones, clave inválida, cuerpo inválido y sobredimensionado, además de outbox con broker no disponible.
+- **Pendiente:** P-04, despachador, worker, lease y reconciliación; P-03, salida segura, firma y receptor. El corte no cumple todavía el recorrido completo ni se ha cerrado mediante PR.
