@@ -1,8 +1,19 @@
 # Registro de implementación de EventFlow
 
-Historial cronológico para **depuración y seguimiento humano**. Añade una entrada breve por cambio significativo, revisión o entrega. La entrada debe indicar qué cambió y por qué, comprobaciones realmente ejecutadas con resultado, y pendientes. La más reciente va arriba. Codex lo actualiza al cerrar trabajo, pero usa [project-state.md](project-state.md) para orientarse; no necesita leer este historial en cada tarea.
+Historial cronológico para **aprendizaje, depuración y seguimiento humano**. Añade una entrada proporcionada a cada cambio significativo, revisión o entrega; la más reciente va arriba. Codex lo actualiza al cerrar trabajo, pero usa [project-state.md](project-state.md) para orientarse: no necesita leer este historial en cada tarea.
+
+Escribe en español, con tono académico y claro para una persona que conoce los fundamentos de programación, la terminal, Git y HTTP, pero aún no domina sistemas distribuidos, seguridad o despliegue. Valora la complejidad desde ese punto de partida. En la primera aparición de un concepto, tecnología o procedimiento que lo supere, define qué es, qué problema resuelve en EventFlow, cómo se aplicó y qué consecuencia tiene la decisión. Por ejemplo, si se introduce un *outbox transaccional*, explica la relación entre la transacción de PostgreSQL y la recuperación del trabajo antes de citar una prueba. Usa ejemplos concretos cuando aclaren el flujo. Evita siglas sin desarrollar, jerga sin explicar y una lista de comandos sin interpretación. No repitas definiciones triviales en cada entrada; enlaza una explicación anterior o una guía técnica cuando ya exista.
+
+Cada entrada debe permitir reconstruir **qué cambió y por qué**, **qué pasos y decisiones técnicas importaron**, **qué se comprobó de verdad y con qué resultado** y **qué queda pendiente**. Distingue hechos verificados, inferencias y trabajo futuro. Indica los comandos relevantes y el resultado observable; un test que no se ejecutó no demuestra una garantía. El detalle debe bastar para que el autor explique y defienda el trabajo en una entrevista, sin convertir el registro en una transcripción de cada acción rutinaria.
 
 ## Entradas
+
+### 2026-10-02 — Registro técnico comprensible para un desarrollador junior
+
+- **Cambio y motivo:** se precisaron `AGENTS.md`, la skill `eventflow-slice` y este registro para que las futuras entradas expliquen las decisiones técnicas con un nivel apto para un desarrollador junior. El proyecto sirve como demostración en entrevistas; por ello, además de saber que una prueba pasó, el autor necesita comprender qué propiedad verificó y por qué importa.
+- **Procedimiento y criterio:** se mantuvo la regla breve en `AGENTS.md`, que Codex consulta al trabajar, y el formato extenso aquí, donde escribe la entrada. La skill del corte remite a este formato al cerrar una entrega. Esta distribución evita mantener varias copias de la misma pauta. «Verificación» significa una comprobación efectivamente ejecutada; mencionar una prueba prevista solo identifica trabajo pendiente.
+- **Verificación:** se revisaron los enlaces locales y el formato de la skill, y se comprobó que el caso 5 de `docs/harness-evals.md` exige la explicación junior. `uv sync --locked` instaló las dependencias fijadas; `alembic upgrade head` aplicó la migración en una base PostgreSQL de prueba separada. `pytest -ra` pasó 3 pruebas sin omisiones; `ruff check .`, `ruff format --check .` y `mypy` pasaron. La suite confirma que el cambio documental no rompe las comprobaciones actuales, pero no mide por sí sola la claridad de futuras entradas: eso se evaluará con el caso 5 durante un corte real.
+- **Pendiente:** comprobar CI y fusionar la PR de este cambio. Las entradas históricas conservan su redacción original; la pauta se aplica a las nuevas entradas.
 
 ### 2026-10-02 — README público y guía operativa separada
 
