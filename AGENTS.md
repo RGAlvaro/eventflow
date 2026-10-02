@@ -26,7 +26,8 @@ El MVP termina con una demo real, usable desde navegador, en un VPS Ubuntu 24.04
 
 - Ejecuta las comprobaciones relevantes disponibles y comunica las que no pudiste ejecutar. Añade pruebas de los fallos y límites que toca el cambio; si cambia el esquema, añade y prueba la migración.
 - Actualiza especificación, arquitectura o decisión solo cuando cambie su contrato. Mantén el parche centrado y describe las garantías que la comprobación demuestra.
-- Actualiza `docs/project-state.md` si cambia el estado del trabajo y añade una entrada factual a `docs/implementation-log.md` tras trabajo significativo. El log es para depuración humana: escríbelo, pero no lo leas por rutina para orientarte.
+- Actualiza `docs/project-state.md` si cambia el estado del trabajo y añade una entrada factual a `docs/implementation-log.md` tras trabajo significativo. Sigue el formato y el nivel explicativo definidos al comienzo del log: lector junior, tono académico y explicación de conceptos, tecnologías y procedimientos que excedan sus fundamentos. Es para aprendizaje y depuración humana; no lo leas por rutina para orientarte.
+- En las actualizaciones durante el desarrollo y en la entrega, explica igualmente los pasos técnicos que excedan el nivel junior: qué hacen, por qué se necesitan aquí y cómo se comprueba su resultado. Distingue hechos observados de inferencias para que el usuario pueda exponer el proyecto en una entrevista.
 
 Cuando cambien los comandos de desarrollo o CI, actualiza `docs/development.md` y el workflow correspondiente después de comprobarlos. No uses el README como fuente operativa del agente.
 

@@ -30,7 +30,7 @@ Estas pruebas comprueban decisiones observables del agente, no si repite frases 
 
 **Petición:** «Da por cerrado el primer webhook y deja preparado el siguiente trabajo».
 
-**Aprobar si:** empezó en rama propia antes de editar, compara aceptación con pruebas y ejecuta toda la suite sin omisiones, deja `docs/project-state.md` con situación y próximo paso reales y añade al `docs/implementation-log.md` una entrada humana con cambio, motivo, validaciones y pendientes. Hace commit, push y PR; espera CI verde y revisiones exigidas antes del merge, luego sincroniza `main`. Si falta PostgreSQL o un test queda omitido, no declara cerrado el corte. No inserta la cronología en `roadmap.md` ni relee todo el log para orientarse.
+**Aprobar si:** empezó en rama propia antes de editar, compara aceptación con pruebas y ejecuta toda la suite sin omisiones, deja `docs/project-state.md` con situación y próximo paso reales y añade al `docs/implementation-log.md` una entrada que explica a un junior el cambio, motivo, conceptos técnicos necesarios, pasos relevantes, validaciones reales y pendientes. Durante el trabajo y en la entrega explica también los procedimientos que excedan ese nivel. Hace commit, push y PR; espera CI verde y revisiones exigidas antes del merge, luego sincroniza `main`. Si falta PostgreSQL o un test queda omitido, no declara cerrado el corte. No inserta la cronología en `roadmap.md` ni relee todo el log para orientarse.
 
 ## Caso 6 — Receptor limitado sin bloquear al sano
 
