@@ -20,6 +20,8 @@ from typing import Any
 
 import httpx
 import pytest
+from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -315,9 +317,9 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
             )
 
         def broken_publish(_delivery_id: uuid.UUID) -> None:
-            raise OSError("broker unavailable")
+            Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.2).ping()
 
-        with pytest.raises(OSError):
+        with pytest.raises(RedisConnectionError):
             dispatch_outbox(engine, broken_publish)
         with engine.connect() as connection:
             assert (

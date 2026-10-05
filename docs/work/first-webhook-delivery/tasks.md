@@ -6,4 +6,4 @@
 - [x] Añadir despachador de outbox, worker, lease y reconciliación; probar caída abrupta, aviso perdido, duplicados y vencimiento del lease con PostgreSQL y Redis reales.
 - [x] Cerrar el diseño P-03: política de URL/puerto, resolución y conexión a IP validada, TLS y salida del VPS.
 - [x] Añadir salida HTTP segura, firma y receptor local de prueba; probar IPv4/IPv6, DNS cambiante, redirecciones, proxy y TLS antes de admitir URLs configurables.
-- [ ] Ejecutar suite completa sin omisiones, escenario de aceptación, CI, revisión de fiabilidad y cierre mediante PR/merge.
+- [x] Ejecutar suite completa sin omisiones, escenario de aceptación, CI, revisión de fiabilidad y cierre mediante PR/merge.
