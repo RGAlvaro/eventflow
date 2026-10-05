@@ -8,4 +8,6 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 RUN uv sync --locked --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
+RUN useradd --create-home --shell /usr/sbin/nologin eventflow
+USER eventflow
 EXPOSE 8000

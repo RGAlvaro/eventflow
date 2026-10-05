@@ -39,7 +39,8 @@ jobs:
           python-version: "3.12"
       - run: uv sync --locked
       - run: uv run --locked alembic upgrade head
-      - run: uv run --locked pytest
+      - run: uv run --locked alembic check
+      - run: uv run --locked pytest -ra
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
       - run: uv run --locked mypy
