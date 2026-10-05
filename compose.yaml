@@ -26,6 +26,7 @@ services:
   api:
     build: .
     environment:
+      EVENTFLOW_ENVIRONMENT: development
       EVENTFLOW_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@postgres:5432/eventflow
       EVENTFLOW_REDIS_URL: redis://redis:6379/0
     ports:
@@ -43,7 +44,33 @@ services:
         - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"
       interval: 5s
       retries: 12
-    command: ["uv", "run", "--no-dev", "--locked", "uvicorn", "eventflow.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "eventflow.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build: .
+    environment:
+      EVENTFLOW_ENVIRONMENT: development
+      EVENTFLOW_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@postgres:5432/eventflow
+      EVENTFLOW_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "eventflow.worker:celery_app", "worker", "--loglevel=INFO", "--concurrency=4"]
+
+  dispatcher:
+    build: .
+    environment:
+      EVENTFLOW_ENVIRONMENT: development
+      EVENTFLOW_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@postgres:5432/eventflow
+      EVENTFLOW_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "eventflow.worker"]
 
 volumes:
   postgres_data:

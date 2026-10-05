@@ -10,22 +10,31 @@ Requiere Python 3.12, `uv` 0.11.16 y Docker Compose. Las credenciales de `compos
 uv sync --locked
 docker compose up -d --wait postgres redis
 uv run --locked alembic upgrade head
-docker compose up -d --build --wait api
+docker compose up -d --build --wait api worker dispatcher
 curl -fsS http://127.0.0.1:8000/health/live
 curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
-La API lee `EVENTFLOW_DATABASE_URL` y `EVENTFLOW_REDIS_URL` (véase `.env.example`). Si la base aún no está migrada, la migración también puede ejecutarse dentro de Compose con `docker compose run --rm api uv run --no-dev --locked alembic upgrade head`. `/health/live` indica que el proceso atiende peticiones; `/health/ready` comprueba PostgreSQL y Redis.
+La API lee `EVENTFLOW_DATABASE_URL` y `EVENTFLOW_REDIS_URL` (véase `.env.example`). Si la base aún no está migrada, la migración también puede ejecutarse dentro de Compose con `docker compose run --rm api alembic upgrade head`. `/health/live` indica que el proceso atiende peticiones; `/health/ready` comprueba PostgreSQL y Redis.
+
+El despachador consulta cada 10 s el outbox y las entregas pendientes o con lease vencido en PostgreSQL; Celery consume los avisos desde Redis. El worker limita a cuatro tareas en el contenedor y la base limita a cuatro entregas HTTP activas entre todos los workers. Para observarlos: `docker compose logs -f dispatcher worker`. Las filas de endpoint y las claves se crean con fixtures por ahora; no hay API de configuración pública. El receptor HTTP de loopback solo se habilita con `EVENTFLOW_ENVIRONMENT=test` (o `development`) y `EVENTFLOW_LOCAL_TEST_RECEIVER_URL` igual a la URL exacta del receptor.
 
 ## Suite backend completa
 
 Con PostgreSQL y Redis iniciados y la migración aplicada:
 
 ```bash
+docker compose stop worker dispatcher
+```
+
+Esto evita que los servicios locales consuman las filas temporales de la suite; las pruebas de entrega arrancan su propio proceso Celery contra Redis.
+
+```bash
 EVENTFLOW_TEST_DATABASE_URL=postgresql+asyncpg://eventflow:eventflow@localhost:5432/eventflow uv run --locked pytest -ra
+uv run --locked alembic check
 uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked mypy
 ```
 
-La prueba de integración se omite cuando falta `EVENTFLOW_TEST_DATABASE_URL`; un corte no está completamente verificado si aparece ese `skip`. GitHub Actions ejecuta instalación, migración y las mismas comprobaciones con PostgreSQL y Redis. Al añadir frontend u otras suites, actualiza esta guía y CI con sus comandos reales.
+Las pruebas de integración se omiten cuando falta `EVENTFLOW_TEST_DATABASE_URL`; un corte no está completamente verificado si aparece algún `skip`. GitHub Actions ejecuta instalación, migración y las mismas comprobaciones con PostgreSQL y Redis. Al añadir frontend u otras suites, actualiza esta guía y CI con sus comandos reales.
