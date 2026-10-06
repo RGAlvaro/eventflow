@@ -22,7 +22,7 @@ import httpx
 import pytest
 from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from eventflow.app import app
@@ -135,7 +135,7 @@ def test_https_request_uses_pinned_ip_sni_and_disables_proxy_and_redirects(
         b"test-key",
     )
     status = send_webhook(claim, lambda _host: [ipaddress.ip_address("8.8.8.8")])
-    assert status == 302
+    assert status.status_code == 302
     request = captured["request"]
     assert isinstance(request, httpx.Request)
     assert str(request.url) == "https://8.8.8.8/deliver"
@@ -222,7 +222,9 @@ def test_https_pinned_connection_checks_original_hostname(
         b"test-key",
     )
     try:
-        assert send_webhook(claim, lambda _host: [ipaddress.ip_address("8.8.8.8")]) == 200
+        assert (
+            send_webhook(claim, lambda _host: [ipaddress.ip_address("8.8.8.8")]).status_code == 200
+        )
         assert connected_to == [("8.8.8.8", 443)]
         assert received_hosts == ["hook.example.com"]
         with pytest.raises(httpx.ConnectError):
@@ -234,6 +236,59 @@ def test_https_pinned_connection_checks_original_hostname(
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_timeout_after_receiver_accepts_can_send_same_delivery_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from eventflow.delivery import ClaimedDelivery
+
+    received: list[bytes] = []
+
+    class SlowThenFastReceiver(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            received.append(body)
+            if len(received) == 1:
+                time.sleep(0.2)
+            try:
+                self.send_response(200)
+                self.end_headers()
+            except BrokenPipeError:
+                pass
+
+        def log_message(self, _format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), SlowThenFastReceiver)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/hook"
+    monkeypatch.setenv("EVENTFLOW_ENVIRONMENT", "test")
+    monkeypatch.setenv("EVENTFLOW_LOCAL_TEST_RECEIVER_URL", url)
+    get_settings.cache_clear()
+    claim = ClaimedDelivery(
+        uuid.uuid4(),
+        uuid.uuid4(),
+        uuid.uuid4(),
+        uuid.uuid4(),
+        uuid.uuid4(),
+        1,
+        "order.created",
+        {"id": 1},
+        url,
+        b"test-key",
+    )
+    try:
+        with pytest.raises(httpx.ReadTimeout):
+            send_webhook(claim, timeout=httpx.Timeout(connect=1, read=0.05, write=1, pool=1))
+        assert send_webhook(claim).status_code == 200
+        assert len(received) == 2 and received[0] == received[1]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        get_settings.cache_clear()
 
 
 @pytest.mark.skipif(
@@ -348,6 +403,11 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
                     - timedelta(seconds=1)
                 )
             )
+            connection.execute(
+                update(DeliveryAttempt)
+                .where(DeliveryAttempt.id == first.attempt_id)
+                .values(started_at=func.clock_timestamp() - timedelta(seconds=2))
+            )
         reconcile_deliveries(engine, notices.append)
         assert notices[-1] == delivery_id
         second = claim_delivery(engine, delivery_id)
@@ -359,8 +419,8 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
                 == "processing"
             )
         status = send_webhook(second)
-        finish_delivery(engine, second, status, None)
-        assert status == 200
+        finish_delivery(engine, second, status.status_code, None)
+        assert status.status_code == 200
         body, headers = received[0]
         payload = json.loads(body)
         assert payload["event_id"] == str(event_id)
@@ -499,10 +559,15 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
 )
 def test_worker_death_recovers_from_postgresql(monkeypatch: pytest.MonkeyPatch) -> None:
     release = threading.Event()
+    first_received = threading.Event()
+    received_count = 0
 
     class SlowReceiver(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
+            nonlocal received_count
             self.rfile.read(int(self.headers["Content-Length"]))
+            received_count += 1
+            first_received.set()
             release.wait(timeout=10)
             try:
                 self.send_response(200)
@@ -598,6 +663,7 @@ def test_worker_death_recovers_from_postgresql(monkeypatch: pytest.MonkeyPatch) 
                 break
             time.sleep(0.2)
         assert state == "processing"
+        assert first_received.wait(timeout=10)
         process.kill()
         process.wait(timeout=5)
         process = None
@@ -612,6 +678,11 @@ def test_worker_death_recovers_from_postgresql(monkeypatch: pytest.MonkeyPatch) 
                     .scalar_subquery()
                     - timedelta(seconds=1)
                 )
+            )
+            connection.execute(
+                update(DeliveryAttempt)
+                .where(DeliveryAttempt.delivery_id == delivery_id)
+                .values(started_at=func.clock_timestamp() - timedelta(seconds=2))
             )
         notices: list[uuid.UUID] = []
         assert reconcile_deliveries(engine, notices.append) == 1
@@ -629,6 +700,7 @@ def test_worker_death_recovers_from_postgresql(monkeypatch: pytest.MonkeyPatch) 
                 break
             time.sleep(0.2)
         assert state == "succeeded"
+        assert received_count == 2
         with engine.connect() as connection:
             assert connection.execute(
                 select(DeliveryAttempt.number)

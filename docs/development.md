@@ -19,6 +19,8 @@ La API lee `EVENTFLOW_DATABASE_URL` y `EVENTFLOW_REDIS_URL` (véase `.env.exampl
 
 El despachador consulta cada 10 s el outbox y las entregas pendientes o con lease vencido en PostgreSQL; Celery consume los avisos desde Redis. El worker limita a cuatro tareas en el contenedor y la base limita a cuatro entregas HTTP activas entre todos los workers. Para observarlos: `docker compose logs -f dispatcher worker`. Las filas de endpoint y las claves se crean con fixtures por ahora; no hay API de configuración pública. El receptor HTTP de loopback solo se habilita con `EVENTFLOW_ENVIRONMENT=test` (o `development`) y `EVENTFLOW_LOCAL_TEST_RECEIVER_URL` igual a la URL exacta del receptor.
 
+En el hito 2, un replay se solicita solo mediante el comando interno `uv run --locked python -m eventflow.replay <delivery-uuid>`. El comando pide la clave de gestión sin mostrarla en los argumentos del proceso y acepta únicamente una entrega `dead_lettered` de su organización. La clave de gestión sigue viniendo de una fixture: aún no hay API pública para emitirla.
+
 ## Suite backend completa
 
 Con PostgreSQL y Redis iniciados y la migración aplicada:

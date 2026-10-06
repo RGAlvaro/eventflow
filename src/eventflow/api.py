@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 
 from fastapi import APIRouter, Request
@@ -6,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from eventflow.config import get_settings
-from eventflow.ingest import ingest_event, publishing_organization
+from eventflow.ingest import IdempotencyConflict, ingest_event, publishing_organization
 
 router = APIRouter(prefix="/api/v1")
 
@@ -53,8 +54,11 @@ async def publish_event(request: Request) -> dict[str, str]:
         organization_id = await publishing_organization(session, raw_key)
         if organization_id is None:
             raise ApiError(401, "unauthorized", "A valid publication API key is required")
-    if request.headers.get("idempotency-key"):
-        raise ApiError(422, "idempotency_unavailable", "Idempotency is not available yet")
+    idempotency_key = request.headers.get("idempotency-key")
+    if idempotency_key is not None and not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._~-]{0,127}", idempotency_key
+    ):
+        raise ApiError(422, "invalid_idempotency_key", "Idempotency-Key is invalid")
     if (
         request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
         != "application/json"
@@ -68,7 +72,14 @@ async def publish_event(request: Request) -> dict[str, str]:
     except (ValueError, ValidationError):
         raise ApiError(422, "invalid_event", "Event type or payload is invalid") from None
     async with AsyncSession(request.app.state.engine, expire_on_commit=False) as session:
-        event_id = await ingest_event(session, organization_id, data.type, data.payload)
+        try:
+            event_id = await ingest_event(
+                session, organization_id, data.type, data.payload, idempotency_key
+            )
+        except IdempotencyConflict:
+            raise ApiError(
+                409, "idempotency_conflict", "Idempotency-Key was used for another event"
+            ) from None
     return {"event_id": str(event_id), "request_id": str(request.state.request_id)}
 
 

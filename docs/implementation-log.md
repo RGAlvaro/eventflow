@@ -8,6 +8,13 @@ Cada entrada debe permitir reconstruir **qué cambió y por qué**, **qué pasos
 
 ## Entradas
 
+### 2026-10-06 — Inicio del hito 2: idempotencia, reintentos y capacidad compartida
+
+- **Cambio y motivo:** se abrió `feat/failure-concurrency` desde `main` actualizado y se preparó el corte EF-02–EF-08/EF-13. Una clave de idempotencia evita que dos peticiones iguales creen dos eventos y dos grupos de entregas: PostgreSQL decide la inserción mediante su restricción única y `ON CONFLICT DO NOTHING`; la segunda petición lee el fingerprint canónico para devolver el evento original o `409`. La transacción que gana sigue creando evento, entregas y outbox juntos.
+- **Procedimiento y criterio:** P-09 fija capacidad y ritmo entre workers mediante el bloqueo transaccional de PostgreSQL, más la historia de intentos del último segundo. Un endpoint conserva `pause_until` para que un `429` retrase solo ese destino. El worker clasifica respuestas y programa reintentos en PostgreSQL con backoff exponencial y jitter; una fecha o segundos de `Retry-After` se acotan a una hora. Se añadió auditoría tenant de replay y un comando que solicita la clave de gestión sin exponerla en los argumentos del proceso. La generación cambia en replay, pero el número global de intento conserva la historia anterior.
+- **Verificación observada:** el SQL offline de Alembic generó la migración 0003; Ruff, formato y mypy pasaron. Trece pruebas puras y de salud pasaron, incluida clasificación y calendario de reintentos. Esta sesión WSL no tiene Docker Desktop integrado ni PostgreSQL/Redis locales; las pruebas de concurrencia, migración aplicada y worker todavía requieren CI con esos servicios reales. No se toma la ejecución con pruebas omitidas como evidencia de aceptación.
+- **Pendiente:** ejecutar y corregir la integración en CI, revisar pérdida/duplicados/tenant/429, y cerrar el corte solo tras suite completa sin omisiones, PR verde y merge.
+
 ### 2026-10-05 — Primer recorrido de entrega con recuperación y firma
 
 - **Cambio y motivo:** se añadieron despachador, worker Celery, reconciliador y emisor HTTPS al corte del hito 1. El *outbox* ya guardaba en la misma transacción que el evento una fila que representa el aviso por publicar. El despachador lee esa fila desde PostgreSQL, avisa a Celery mediante Redis y solo entonces marca la publicación. Si la conexión TCP con Redis es rechazada, la fila permanece pendiente; si la publicación se duplica, el reclamo de la entrega en PostgreSQL impide que dos avisos normales creen dos intentos a la vez. El reconciliador vuelve a anunciar entregas pendientes o con reserva vencida aunque el outbox figure publicado, para recuperar avisos perdidos o procesos muertos.

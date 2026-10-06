@@ -51,9 +51,11 @@ def deliver(delivery_id: str) -> None:
         old_handler = signal.signal(signal.SIGALRM, deadline_reached)
         signal.setitimer(signal.ITIMER_REAL, 20)
         response_status: int | None = None
+        retry_after: str | None = None
         error: str | None = None
         try:
-            response_status = send_webhook(claim)
+            result = send_webhook(claim)
+            response_status, retry_after = result.status_code, result.retry_after
         except UnsafeDestination:
             error = "unsafe_destination"
         except (OSError, httpx.HTTPError):
@@ -63,7 +65,7 @@ def deliver(delivery_id: str) -> None:
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, old_handler)
-        finish_delivery(engine, claim, response_status, error)
+        finish_delivery(engine, claim, response_status, error, retry_after)
         logger.info(
             "delivery_attempt_completed organization_id=%s delivery_id=%s attempt_id=%s status=%s",
             claim.organization_id,

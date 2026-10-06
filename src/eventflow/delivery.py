@@ -11,11 +11,16 @@ from sqlalchemy.orm import Session
 
 from eventflow.config import get_settings
 from eventflow.models import Delivery, DeliveryAttempt, Endpoint, Event, OutboxMessage
+from eventflow.retry import backoff_seconds, classify_result, retry_after_seconds
 
 Publisher = Callable[[uuid.UUID], None]
 
 LEASE_SECONDS = 60
 GLOBAL_IN_FLIGHT = 4
+ENDPOINT_IN_FLIGHT = 2
+GLOBAL_STARTS_PER_SECOND = 4
+ENDPOINT_STARTS_PER_SECOND = 1
+MAX_ATTEMPTS_PER_GENERATION = 7
 
 
 def make_sync_engine() -> Engine:
@@ -51,13 +56,6 @@ def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | 
         session.execute(text("SELECT pg_advisory_xact_lock(457219, 1)"))
         now = session.scalar(select(func.clock_timestamp()))
         assert now is not None
-        active = session.scalar(
-            select(func.count())
-            .select_from(Delivery)
-            .where(Delivery.status == "processing", Delivery.lease_expires_at > now)
-        )
-        if active is not None and active >= GLOBAL_IN_FLIGHT:
-            return None
         delivery = session.scalar(
             select(Delivery).where(Delivery.id == delivery_id).with_for_update()
         )
@@ -95,6 +93,79 @@ def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | 
         )
         if endpoint is None or event is None:
             raise RuntimeError("Delivery has no tenant-matched endpoint or event")
+        generation_attempts = (
+            session.scalar(
+                select(func.count())
+                .select_from(DeliveryAttempt)
+                .where(
+                    DeliveryAttempt.organization_id == delivery.organization_id,
+                    DeliveryAttempt.delivery_id == delivery.id,
+                    DeliveryAttempt.generation == delivery.generation,
+                )
+            )
+            or 0
+        )
+        if generation_attempts >= MAX_ATTEMPTS_PER_GENERATION:
+            delivery.status = "dead_lettered"
+            delivery.lease_token = None
+            delivery.lease_expires_at = None
+            delivery.next_attempt_at = None
+            return None
+        if endpoint.pause_until is not None and endpoint.pause_until > now:
+            return None
+        active_global = (
+            session.scalar(
+                select(func.count())
+                .select_from(Delivery)
+                .where(Delivery.status == "processing", Delivery.lease_expires_at > now)
+            )
+            or 0
+        )
+        active_endpoint = (
+            session.scalar(
+                select(func.count())
+                .select_from(Delivery)
+                .where(
+                    Delivery.endpoint_id == delivery.endpoint_id,
+                    Delivery.organization_id == delivery.organization_id,
+                    Delivery.status == "processing",
+                    Delivery.lease_expires_at > now,
+                )
+            )
+            or 0
+        )
+        recent_global = (
+            session.scalar(
+                select(func.count())
+                .select_from(DeliveryAttempt)
+                .where(DeliveryAttempt.started_at > now - timedelta(seconds=1))
+            )
+            or 0
+        )
+        recent_endpoint = (
+            session.scalar(
+                select(func.count())
+                .select_from(DeliveryAttempt)
+                .join(
+                    Delivery,
+                    (Delivery.id == DeliveryAttempt.delivery_id)
+                    & (Delivery.organization_id == DeliveryAttempt.organization_id),
+                )
+                .where(
+                    Delivery.endpoint_id == delivery.endpoint_id,
+                    Delivery.organization_id == delivery.organization_id,
+                    DeliveryAttempt.started_at > now - timedelta(seconds=1),
+                )
+            )
+            or 0
+        )
+        if (
+            active_global >= GLOBAL_IN_FLIGHT
+            or active_endpoint >= ENDPOINT_IN_FLIGHT
+            or recent_global >= GLOBAL_STARTS_PER_SECOND
+            or recent_endpoint >= ENDPOINT_STARTS_PER_SECOND
+        ):
+            return None
         token, attempt_id = uuid.uuid4(), uuid.uuid4()
         delivery.status = "processing"
         delivery.lease_token = token
@@ -127,9 +198,14 @@ def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | 
 
 
 def finish_delivery(
-    engine: Engine, claim: ClaimedDelivery, response_status: int | None, error: str | None
+    engine: Engine,
+    claim: ClaimedDelivery,
+    response_status: int | None,
+    error: str | None,
+    retry_after: str | None = None,
 ) -> None:
     with Session(engine) as session, session.begin():
+        session.execute(text("SELECT pg_advisory_xact_lock(457219, 1)"))
         now = session.scalar(select(func.clock_timestamp()))
         delivery = session.scalar(
             select(Delivery)
@@ -148,6 +224,7 @@ def finish_delivery(
         )
         if delivery is None or attempt is None or now is None:
             raise RuntimeError("Claimed delivery or attempt disappeared")
+        outcome = classify_result(response_status, error)
         owns_lease = (
             delivery.lease_token == claim.token
             and delivery.status == "processing"
@@ -158,27 +235,52 @@ def finish_delivery(
         attempt.error_category = error
         attempt.finished_at = now
         attempt.status = (
-            (
-                "succeeded"
-                if response_status is not None and 200 <= response_status < 300
-                else "failed"
-            )
-            if owns_lease
-            else "late_result"
+            ("succeeded" if outcome == "success" else "failed") if owns_lease else "late_result"
         )
         if not owns_lease:
             return
         delivery.lease_token = None
         delivery.lease_expires_at = None
-        if attempt.status == "succeeded":
+        if outcome == "success":
             delivery.status = "succeeded"
-        else:
-            # Hito 2 refines response classification and backoff.
-            if delivery.attempt_count >= 7:
-                delivery.status = "dead_lettered"
-            else:
-                delivery.status = "retry_scheduled"
-                delivery.next_attempt_at = now + timedelta(seconds=30)
+            return
+        generation_attempts = (
+            session.scalar(
+                select(func.count())
+                .select_from(DeliveryAttempt)
+                .where(
+                    DeliveryAttempt.organization_id == claim.organization_id,
+                    DeliveryAttempt.delivery_id == claim.delivery_id,
+                    DeliveryAttempt.generation == claim.generation,
+                )
+            )
+            or 0
+        )
+        if outcome == "permanent" or generation_attempts >= MAX_ATTEMPTS_PER_GENERATION:
+            delivery.status = "dead_lettered"
+            delivery.next_attempt_at = None
+            return
+        next_attempt_at = now + timedelta(seconds=backoff_seconds(generation_attempts))
+        if response_status == 429:
+            delay = retry_after_seconds(retry_after, now)
+            if delay is not None:
+                endpoint = session.scalar(
+                    select(Endpoint)
+                    .where(
+                        Endpoint.id == delivery.endpoint_id,
+                        Endpoint.organization_id == delivery.organization_id,
+                    )
+                    .with_for_update()
+                )
+                if endpoint is None:
+                    raise RuntimeError("Delivery endpoint disappeared")
+                pause_until = now + timedelta(seconds=delay)
+                if endpoint.pause_until is None or endpoint.pause_until < pause_until:
+                    endpoint.pause_until = pause_until
+                if endpoint.pause_until > next_attempt_at:
+                    next_attempt_at = endpoint.pause_until
+        delivery.status = "retry_scheduled"
+        delivery.next_attempt_at = next_attempt_at
 
 
 def dispatch_outbox(engine: Engine, publish: "Publisher", limit: int = 100) -> int:

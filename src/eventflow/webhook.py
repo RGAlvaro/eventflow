@@ -8,6 +8,7 @@ import re
 import socket
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address
 from urllib.parse import urlsplit
 
@@ -22,6 +23,12 @@ Resolver = Callable[[str], list[Address]]
 
 class UnsafeDestination(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class WebhookResult:
+    status_code: int
+    retry_after: str | None
 
 
 def resolve_public(host: str) -> list[Address]:
@@ -112,7 +119,11 @@ def signed_request(claim: ClaimedDelivery) -> tuple[bytes, dict[str, str]]:
     }
 
 
-def send_webhook(claim: ClaimedDelivery, resolver: Resolver = resolve_public) -> int:
+def send_webhook(
+    claim: ClaimedDelivery,
+    resolver: Resolver = resolve_public,
+    timeout: httpx.Timeout | None = None,
+) -> WebhookResult:
     url, host = validated_destination(claim.url, resolver)
     body, headers = signed_request(claim)
     headers["Host"] = host if url.port in (None, 80, 443) else f"{host}:{url.port}"
@@ -120,13 +131,13 @@ def send_webhook(claim: ClaimedDelivery, resolver: Resolver = resolve_public) ->
         trust_env=False,
         follow_redirects=False,
         http2=False,
-        timeout=httpx.Timeout(connect=5, read=10, write=5, pool=2),
+        timeout=timeout or httpx.Timeout(connect=5, read=10, write=5, pool=2),
     ) as client:
         request = client.build_request("POST", url, headers=headers, content=body)
         if url.scheme == "https":
             request.extensions["sni_hostname"] = host
         response = client.send(request, stream=True)
         try:
-            return response.status_code
+            return WebhookResult(response.status_code, response.headers.get("Retry-After"))
         finally:
             response.close()
