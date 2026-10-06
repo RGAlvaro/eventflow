@@ -9,6 +9,7 @@ Requisitos: EF-02–EF-08 y EF-13. El estado durable y los intentos pertenecen a
 3. Tras siete fallos reintentables, la entrega queda `dead_lettered`. Un comando interno con credencial de gestión del mismo tenant registra actor y nueva generación, crea trabajo recuperable y permite éxito sin borrar intentos anteriores. Una clave de publicación o de otro tenant no puede repetirla.
 4. Dos workers o avisos duplicados no crean un intento duplicado ni superan capacidad agregada. Si vence un lease, el resultado tardío no pisa el nuevo estado. Un timeout después de que el receptor procese la petición puede causar otro envío físico con los mismos IDs y generación.
 5. Los límites compartidos de P-09 se respetan entre workers. Un 429 con `Retry-After` en segundos o fecha HTTP pausa solo su endpoint, con máximo de una hora; el otro destino progresa. Una fecha o valor inválido usa backoff ordinario.
+   Una cola con más de 100 entregas de un destino pausado no impide que el reconciliador alcance trabajo posterior de un destino sano.
 6. Una caída entre commit y publicación, la pérdida de un aviso o un worker muerto dejan la entrega recuperable sin nueva petición de ingesta.
 
 ## Límites

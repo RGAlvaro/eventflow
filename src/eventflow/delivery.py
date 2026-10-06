@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import create_engine, func, or_, select, text, update
+from sqlalchemy import create_engine, func, or_, select, text, tuple_, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -309,12 +309,24 @@ def dispatch_outbox(engine: Engine, publish: "Publisher", limit: int = 100) -> i
 
 
 def reconcile_deliveries(engine: Engine, publish: "Publisher", limit: int = 100) -> int:
+    if limit < 1:
+        raise ValueError("Reconciliation page size must be positive")
     with Session(engine) as session:
         now = session.scalar(select(func.clock_timestamp()))
         assert now is not None
-        ids = session.scalars(
-            select(Delivery.id).where(due_filter(now)).order_by(Delivery.created_at).limit(limit)
-        ).all()
-    for delivery_id in ids:
-        publish(delivery_id)
-    return len(ids)
+    cursor: tuple[datetime, uuid.UUID] | None = None
+    published = 0
+    while True:
+        with Session(engine) as session:
+            query = select(Delivery.id, Delivery.created_at).where(due_filter(now))
+            if cursor is not None:
+                query = query.where(tuple_(Delivery.created_at, Delivery.id) > cursor)
+            rows = session.execute(
+                query.order_by(Delivery.created_at, Delivery.id).limit(limit)
+            ).all()
+        for delivery_id, _created_at in rows:
+            publish(delivery_id)
+            published += 1
+        if len(rows) < limit:
+            return published
+        cursor = (rows[-1].created_at, rows[-1].id)

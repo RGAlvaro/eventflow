@@ -1,14 +1,25 @@
 import os
 import secrets
+import subprocess
+import sys
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.engine import Engine
 
-from eventflow.delivery import claim_delivery, finish_delivery, make_sync_engine
+from eventflow.config import get_settings
+from eventflow.delivery import (
+    claim_delivery,
+    finish_delivery,
+    make_sync_engine,
+    reconcile_deliveries,
+)
 from eventflow.ingest import hash_api_key
 from eventflow.models import (
     ApiKey,
@@ -21,6 +32,8 @@ from eventflow.models import (
     ReplayAudit,
 )
 from eventflow.replay import ReplayDenied, ReplayUnavailable, replay_delivery
+from eventflow.webhook import send_webhook
+from eventflow.worker import deliver
 
 
 def seed_deliveries(
@@ -154,6 +167,54 @@ def test_global_concurrency_is_shared_between_endpoints() -> None:
 @pytest.mark.skipif(
     not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
 )
+def test_global_start_rate_is_shared_after_slots_are_freed() -> None:
+    engine = make_sync_engine()
+    tenant, _endpoints, deliveries = seed_deliveries(engine, [1, 1, 1, 1, 1])
+    try:
+        for delivery_ids in deliveries[:4]:
+            claim = claim_delivery(engine, delivery_ids[0])
+            assert claim is not None
+            finish_delivery(engine, claim, 200, None)
+        assert claim_delivery(engine, deliveries[4][0]) is None
+        with engine.begin() as connection:
+            connection.execute(
+                update(DeliveryAttempt)
+                .where(DeliveryAttempt.organization_id == tenant)
+                .values(started_at=func.clock_timestamp() - timedelta(seconds=2))
+            )
+        final_claim = claim_delivery(engine, deliveries[4][0])
+        assert final_claim is not None
+        finish_delivery(engine, final_claim, 200, None)
+    finally:
+        clean_tenant(engine, tenant)
+        engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
+)
+def test_reconciler_reaches_healthy_delivery_after_many_paused_rows() -> None:
+    engine = make_sync_engine()
+    tenant, endpoints, deliveries = seed_deliveries(engine, [101, 1])
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                update(Endpoint)
+                .where(Endpoint.id == endpoints[0])
+                .values(pause_until=func.clock_timestamp() + timedelta(seconds=60))
+            )
+        notices: list[uuid.UUID] = []
+        assert reconcile_deliveries(engine, notices.append, limit=25) == 102
+        assert len(notices) == len(set(notices)) == 102
+        assert deliveries[1][0] in notices
+    finally:
+        clean_tenant(engine, tenant)
+        engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
+)
 def test_two_concurrent_claims_create_one_attempt() -> None:
     engine = make_sync_engine()
     tenant, _endpoints, deliveries = seed_deliveries(engine, [1])
@@ -273,8 +334,10 @@ def test_three_attempts_then_success_and_tenant_authorized_replay(
         finish_delivery(engine, replay_claim, 200, None)
         with engine.connect() as connection:
             audit = connection.execute(
-                select(ReplayAudit).where(ReplayAudit.delivery_id == delivery_id)
-            ).scalar_one()
+                select(ReplayAudit.actor_key_id, ReplayAudit.generation).where(
+                    ReplayAudit.delivery_id == delivery_id
+                )
+            ).one()
             assert audit.actor_key_id == actor_id and audit.generation == 2
             assert (
                 connection.scalar(
@@ -344,3 +407,180 @@ def test_seven_retryable_failures_dead_letter_the_generation(
     finally:
         clean_tenant(engine, tenant)
         engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
+)
+def test_two_celery_workers_keep_429_pause_local_to_one_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[uuid.UUID] = []
+    limited_id = uuid.uuid4()
+
+    class Receiver(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            delivery_id = uuid.UUID(self.headers["X-EventFlow-Delivery-Id"])
+            received.append(delivery_id)
+            self.send_response(429 if delivery_id == limited_id else 200)
+            if delivery_id == limited_id:
+                self.send_header("Retry-After", "60")
+            self.end_headers()
+
+        def log_message(self, _format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Receiver)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/hook"
+    monkeypatch.setenv("EVENTFLOW_ENVIRONMENT", "test")
+    monkeypatch.setenv("EVENTFLOW_LOCAL_TEST_RECEIVER_URL", url)
+    get_settings.cache_clear()
+    engine = make_sync_engine()
+    tenant, endpoints, deliveries = seed_deliveries(engine, [2, 1])
+    limited_id = deliveries[0][0]
+    healthy_id = deliveries[1][0]
+    queue = f"test-{uuid.uuid4()}"
+    processes: list[subprocess.Popen[bytes]] = []
+    try:
+        with engine.begin() as connection:
+            connection.execute(update(Endpoint).where(Endpoint.id.in_(endpoints)).values(url=url))
+        for index in range(2):
+            processes.append(
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "celery",
+                        "-A",
+                        "eventflow.worker:celery_app",
+                        "worker",
+                        "--pool=solo",
+                        "--concurrency=1",
+                        "--loglevel=WARNING",
+                        "-Q",
+                        queue,
+                        "-n",
+                        f"limits-{index}@%h",
+                    ],
+                    env=os.environ.copy(),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            )
+        deliver.apply_async(args=[str(limited_id)], queue=queue)
+        deliver.apply_async(args=[str(healthy_id)], queue=queue)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            with engine.connect() as connection:
+                limited_status = connection.scalar(
+                    select(Delivery.status).where(Delivery.id == limited_id)
+                )
+                healthy_status = connection.scalar(
+                    select(Delivery.status).where(Delivery.id == healthy_id)
+                )
+            if limited_status == "retry_scheduled" and healthy_status == "succeeded":
+                break
+            time.sleep(0.2)
+        assert limited_status == "retry_scheduled" and healthy_status == "succeeded"
+        deliver.apply_async(args=[str(deliveries[0][1])], queue=queue)
+        time.sleep(2)
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(select(Delivery.status).where(Delivery.id == deliveries[0][1]))
+                == "pending"
+            )
+            assert (
+                connection.scalar(
+                    select(func.count())
+                    .select_from(DeliveryAttempt)
+                    .where(DeliveryAttempt.delivery_id == deliveries[0][1])
+                )
+                == 0
+            )
+            pause = connection.scalar(
+                select(Endpoint.pause_until).where(Endpoint.id == endpoints[0])
+            )
+            assert pause is not None
+        assert limited_id in received and healthy_id in received
+        assert deliveries[0][1] not in received
+    finally:
+        for process in processes:
+            process.terminate()
+            process.wait(timeout=5)
+        clean_tenant(engine, tenant)
+        engine.dispose()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        get_settings.cache_clear()
+
+
+@pytest.mark.skipif(
+    not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
+)
+def test_real_receiver_503_twice_then_200_preserves_attempt_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[uuid.UUID] = []
+
+    class Receiver(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            received.append(uuid.UUID(self.headers["X-EventFlow-Delivery-Id"]))
+            self.send_response(503 if len(received) < 3 else 200)
+            self.end_headers()
+
+        def log_message(self, _format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Receiver)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/hook"
+    monkeypatch.setenv("EVENTFLOW_ENVIRONMENT", "test")
+    monkeypatch.setenv("EVENTFLOW_LOCAL_TEST_RECEIVER_URL", url)
+    get_settings.cache_clear()
+    engine = make_sync_engine()
+    tenant, endpoints, deliveries = seed_deliveries(engine, [1])
+    delivery_id = deliveries[0][0]
+    try:
+        with engine.begin() as connection:
+            connection.execute(update(Endpoint).where(Endpoint.id == endpoints[0]).values(url=url))
+        for number in range(1, 4):
+            claim = claim_delivery(engine, delivery_id)
+            assert claim is not None
+            response = send_webhook(claim)
+            finish_delivery(engine, claim, response.status_code, None, response.retry_after)
+            if number < 3:
+                with engine.begin() as connection:
+                    connection.execute(
+                        update(Delivery)
+                        .where(Delivery.id == delivery_id)
+                        .values(next_attempt_at=func.clock_timestamp() - timedelta(seconds=1))
+                    )
+                    connection.execute(
+                        update(DeliveryAttempt)
+                        .where(DeliveryAttempt.id == claim.attempt_id)
+                        .values(started_at=func.clock_timestamp() - timedelta(seconds=2))
+                    )
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(select(Delivery.status).where(Delivery.id == delivery_id))
+                == "succeeded"
+            )
+            assert connection.execute(
+                select(DeliveryAttempt.response_status)
+                .where(DeliveryAttempt.delivery_id == delivery_id)
+                .order_by(DeliveryAttempt.number)
+            ).scalars().all() == [503, 503, 200]
+        assert received == [delivery_id] * 3
+    finally:
+        clean_tenant(engine, tenant)
+        engine.dispose()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        get_settings.cache_clear()
