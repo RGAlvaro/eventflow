@@ -32,6 +32,7 @@ class Organization(Base):
 
 class ApiKey(Base):
     __tablename__ = "api_keys"
+    __table_args__ = (UniqueConstraint("organization_id", "id", name="uq_api_keys_tenant_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -57,6 +58,7 @@ class Endpoint(Base):
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     signing_secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    pause_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -137,6 +139,7 @@ class DeliveryAttempt(Base):
             ["organization_id", "delivery_id"], ["deliveries.organization_id", "deliveries.id"]
         ),
         UniqueConstraint("delivery_id", "number"),
+        Index("ix_delivery_attempts_started_at", "started_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -171,5 +174,29 @@ class OutboxMessage(Base):
     generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ReplayAudit(Base):
+    __tablename__ = "replay_audits"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "delivery_id"], ["deliveries.organization_id", "deliveries.id"]
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "actor_key_id"], ["api_keys.organization_id", "api_keys.id"]
+        ),
+        UniqueConstraint("delivery_id", "generation"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+    delivery_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    actor_key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

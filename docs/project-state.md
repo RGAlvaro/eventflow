@@ -1,15 +1,15 @@
 # Estado actual de EventFlow
 
-Actualizado: 2026-10-05. Esta es una **foto breve del presente** para orientar la siguiente tarea; no almacena el historial. La secuencia prevista está en [roadmap.md](roadmap.md) y la actividad pasada en [implementation-log.md](implementation-log.md).
+Actualizado: 2026-10-06. Esta es una **foto breve del presente** para orientar la siguiente tarea; no almacena el historial. La secuencia prevista está en [roadmap.md](roadmap.md) y la actividad pasada en [implementation-log.md](implementation-log.md).
 
 | Aspecto | Estado |
 | --- | --- |
-| Hito activo | Hito 1 completado; el siguiente es el hito 2 (fallos, duplicados y concurrencia). |
-| Corte activo | Ninguno tras el cierre de la [PR #4](https://github.com/RGAlvaro/eventflow/pull/4). |
-| Producto existente | Base e ingesta atómica del hito 0/1; despachador, worker Celery, lease, reconciliación, salida HTTPS segura y firma HMAC añadidos en la rama. Todavía no hay frontend ni gestión pública de destinos. |
-| Última evidencia | Suite local: 10 pruebas sin omisiones con PostgreSQL y Redis reales, incluida ruta API `202` → Celery → receptor firmado, conexión al broker rechazada, aviso perdido, duplicados, lease vencido y caída real de worker; TLS local con IP fijada y certificado incorrecto. Ruff, mypy, Alembic y arranque Compose pasan. CI de la PR #4 pasó instalación, migración, suite, Ruff y mypy. |
-| Decisiones inmediatas | P-03 y P-04 cerradas y probadas localmente para hito 1; P-08 detallará y comprobará el bloqueo de salida del VPS antes de exposición pública. |
-| Bloqueos externos | Ninguno conocido. |
-| Próxima acción | Preparar un corte del hito 2 para idempotencia concurrente, clasificación y espera de reintentos, y límites compartidos por endpoint. |
+| Hito activo | Hito 2 verificado; el siguiente trabajo corresponde al hito 3. |
+| Último corte | `docs/work/failure-concurrency/`, entregado mediante PR #5. |
+| Producto existente | Ingesta idempotente por organización, reintentos y dead letter, replay interno auditado, límites compartidos globales y por endpoint, pausa por 429 y recuperación desde PostgreSQL. Todavía no hay frontend ni gestión pública de claves y destinos. |
+| Última evidencia | CI de la PR #5, ejecución 37431155952: migración 0003 y `alembic check` correctos; 32 pruebas pasadas sin omisiones con PostgreSQL y Redis reales, incluidos dos workers Celery, receptor real, conflictos de idempotencia y replay; Ruff, formato y mypy correctos. |
+| Decisiones inmediatas | P-09 implementada y probada. P-05/P-06 preceden a la gestión de claves y límites de ingesta del hito 3; P-08 detallará el bloqueo de salida del VPS antes de exposición pública. |
+| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; la integración completa se ejecutó en CI. No hay bloqueo del producto por ello. |
+| Próxima acción | Iniciar hito 3: cerrar P-05/P-06 y preparar gestión de claves, autorización y límites de ingesta en rama propia. |
 
 Actualiza esta tabla cuando cambie el hito, el corte, una capacidad comprobada, un bloqueo o la siguiente acción. Mantén el detalle de comandos, pruebas y motivos en la entrada correspondiente del log humano, sin copiar aquí su cronología.
