@@ -81,10 +81,15 @@ async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
 
-            async def publish(key: str, payload: dict[str, object]) -> httpx.Response:
+            async def publish(
+                key: str, payload: dict[str, object], idempotency_key: str = "same-key"
+            ) -> httpx.Response:
                 return await client.post(
                     "/api/v1/events",
-                    headers={"Authorization": f"Bearer {key}", "Idempotency-Key": "same-key"},
+                    headers={
+                        "Authorization": f"Bearer {key}",
+                        "Idempotency-Key": idempotency_key,
+                    },
                     json={"type": "order.created", "payload": payload},
                 )
 
@@ -101,6 +106,11 @@ async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
             other_tenant = await publish(keys[1], {"a": 3})
             assert other_tenant.status_code == 202
             assert other_tenant.json()["event_id"] != str(event_id)
+            racing_first, racing_second = await asyncio.gather(
+                publish(keys[0], {"racing": 1}, "racing-conflict"),
+                publish(keys[0], {"racing": 2}, "racing-conflict"),
+            )
+            assert sorted((racing_first.status_code, racing_second.status_code)) == [202, 409]
             invalid = await client.post(
                 "/api/v1/events",
                 headers={"Authorization": f"Bearer {keys[0]}", "Idempotency-Key": "bad key"},
@@ -114,7 +124,7 @@ async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
                     .select_from(Event)
                     .where(Event.organization_id == tenants[0])
                 )
-                == 1
+                == 2
             )
             assert (
                 await connection.scalar(
@@ -128,7 +138,7 @@ async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
                     .select_from(OutboxMessage)
                     .where(OutboxMessage.organization_id == tenants[0])
                 )
-                == 1
+                == 2
             )
     finally:
         async with engine.begin() as connection:

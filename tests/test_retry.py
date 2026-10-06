@@ -34,6 +34,7 @@ def test_retry_after_seconds_dates_invalid_and_maximum() -> None:
     now = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
     assert retry_after_seconds("17", now) == 17
     assert retry_after_seconds("99999", now) == 3600
+    assert retry_after_seconds("9" * 5000, now) == 3600
     assert retry_after_seconds(format_datetime(now + timedelta(seconds=90)), now) == 90
     assert retry_after_seconds(format_datetime(now - timedelta(seconds=5)), now) == 0
     assert retry_after_seconds("nonsense", now) is None

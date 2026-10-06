@@ -31,10 +31,14 @@ def retry_after_seconds(value: str | None, now: datetime) -> int | None:
         return None
     stripped = value.strip()
     if re.fullmatch(r"[0-9]+", stripped):
-        return min(int(stripped), MAX_RETRY_AFTER_SECONDS)
+        digits = stripped.lstrip("0") or "0"
+        maximum = str(MAX_RETRY_AFTER_SECONDS)
+        if len(digits) > len(maximum) or (len(digits) == len(maximum) and digits > maximum):
+            return MAX_RETRY_AFTER_SECONDS
+        return int(digits)
     try:
         moment = parsedate_to_datetime(stripped)
-    except (TypeError, ValueError, IndexError):
+    except (TypeError, ValueError, IndexError, OverflowError):
         return None
     if moment.tzinfo is None:
         return None

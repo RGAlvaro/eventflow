@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import os
 import secrets
 import subprocess
@@ -367,14 +370,60 @@ def test_seven_retryable_failures_dead_letter_the_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("eventflow.retry.random.random", lambda: 0.5)
+    received: list[tuple[uuid.UUID, int]] = []
+    effects: set[tuple[uuid.UUID, int]] = set()
+
+    class Receiver(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            delivery_id = uuid.UUID(self.headers["X-EventFlow-Delivery-Id"])
+            generation = int(self.headers["X-EventFlow-Generation"])
+            expected = hmac.new(
+                b"fixture",
+                self.headers["X-EventFlow-Timestamp"].encode() + b"." + body,
+                hashlib.sha256,
+            ).hexdigest()
+            valid = hmac.compare_digest(
+                self.headers["X-EventFlow-Signature"], f"v1={expected}"
+            ) and json.loads(body)["delivery_id"] == str(delivery_id)
+            if valid:
+                received.append((delivery_id, generation))
+                effects.add((delivery_id, generation))
+            self.send_response(401 if not valid else 503 if generation == 1 else 200)
+            self.end_headers()
+
+        def log_message(self, _format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Receiver)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/hook"
+    monkeypatch.setenv("EVENTFLOW_ENVIRONMENT", "test")
+    monkeypatch.setenv("EVENTFLOW_LOCAL_TEST_RECEIVER_URL", url)
+    get_settings.cache_clear()
     engine = make_sync_engine()
-    tenant, _endpoints, deliveries = seed_deliveries(engine, [1])
+    tenant, endpoints, deliveries = seed_deliveries(engine, [1])
     delivery_id = deliveries[0][0]
+    management_key = secrets.token_urlsafe(32)
     try:
+        with engine.begin() as connection:
+            connection.execute(update(Endpoint).where(Endpoint.id == endpoints[0]).values(url=url))
+            connection.execute(
+                insert(ApiKey).values(
+                    id=uuid.uuid4(),
+                    organization_id=tenant,
+                    key_prefix=management_key[:12],
+                    key_hash=hash_api_key(management_key),
+                    scope="manage",
+                )
+            )
         for number in range(1, 8):
             claim = claim_delivery(engine, delivery_id)
             assert claim is not None
-            finish_delivery(engine, claim, 503, None)
+            result = send_webhook(claim)
+            assert result.status_code == 503
+            finish_delivery(engine, claim, result.status_code, None)
             if number < 7:
                 with engine.begin() as connection:
                     connection.execute(
@@ -404,9 +453,44 @@ def test_seven_retryable_failures_dead_letter_the_generation(
                 == 7
             )
         assert claim_delivery(engine, delivery_id) is None
+        assert received == [(delivery_id, 1)] * 7
+        assert effects == {(delivery_id, 1)}
+        assert replay_delivery(engine, delivery_id, management_key) == 2
+        with engine.begin() as connection:
+            connection.execute(
+                update(DeliveryAttempt)
+                .where(DeliveryAttempt.delivery_id == delivery_id)
+                .values(started_at=func.clock_timestamp() - timedelta(seconds=2))
+            )
+        replay_claim = claim_delivery(engine, delivery_id)
+        assert replay_claim is not None and replay_claim.generation == 2
+        assert send_webhook(replay_claim).status_code == 200
+        assert send_webhook(replay_claim).status_code == 200  # duplicate physical request
+        finish_delivery(engine, replay_claim, 200, None)
+        assert effects == {(delivery_id, 1), (delivery_id, 2)}
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(select(Delivery.status).where(Delivery.id == delivery_id))
+                == "succeeded"
+            )
+            assert (
+                connection.scalar(
+                    select(func.count())
+                    .select_from(DeliveryAttempt)
+                    .where(
+                        DeliveryAttempt.delivery_id == delivery_id,
+                        DeliveryAttempt.generation == 2,
+                    )
+                )
+                == 1
+            )
     finally:
         clean_tenant(engine, tenant)
         engine.dispose()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        get_settings.cache_clear()
 
 
 @pytest.mark.skipif(
