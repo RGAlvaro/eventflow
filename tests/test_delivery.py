@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 import pytest
 from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -471,7 +472,11 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
 
         async def publish_via_api() -> uuid.UUID:
             async_engine = create_async_engine(os.environ["EVENTFLOW_TEST_DATABASE_URL"])
+            async_redis = AsyncRedis.from_url(
+                os.getenv("EVENTFLOW_REDIS_URL", "redis://localhost:6379/0")
+            )
             app.state.engine = async_engine
+            app.state.redis = async_redis
             try:
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -485,6 +490,7 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
                     return uuid.UUID(response.json()["event_id"])
             finally:
                 await async_engine.dispose()
+                await async_redis.aclose()
 
         event_two = asyncio.run(publish_via_api())
         with engine.connect() as connection:

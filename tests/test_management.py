@@ -83,7 +83,7 @@ async def test_management_keys_endpoints_rotation_and_tenant_scope(
             assert listing.status_code == 200
             assert issued_key not in listing.text and "key_hash" not in listing.text
             assert any(row["id"] == str(issued_id) for row in listing.json())
-            monkeypatch.setattr("eventflow.management.MAX_KEYS", 3)
+            monkeypatch.setattr("eventflow.management.MAX_KEYS", 4)
             competing = await asyncio.gather(
                 *(
                     client.post(

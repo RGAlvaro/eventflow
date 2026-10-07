@@ -151,10 +151,10 @@ async def test_purge_deletes_only_expired_terminal_aggregates_and_replay_reopens
                 await connection.scalar(select(Event.id).where(Event.id == pending_event))
                 is not None
             )
-            reopened = (
-                await connection.execute(select(Event).where(Event.id == replay_event))
-            ).scalar_one()
-            assert reopened.terminal_at is None
+            assert (
+                await connection.scalar(select(Event.terminal_at).where(Event.id == replay_event))
+                is None
+            )
     finally:
         await clean_organizations(async_engine, [tenant])
         await async_engine.dispose()

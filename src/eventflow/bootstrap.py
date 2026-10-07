@@ -20,6 +20,7 @@ def create_organization(name: str) -> tuple[uuid.UUID, str]:
     try:
         with Session(engine) as session, session.begin():
             session.add(Organization(id=organization_id, name=name.strip()))
+            session.flush()
             session.add(
                 ApiKey(
                     id=key_id,
@@ -29,6 +30,7 @@ def create_organization(name: str) -> tuple[uuid.UUID, str]:
                     scope="manage",
                 )
             )
+            session.flush()
             session.add(
                 ManagementAudit(
                     id=uuid.uuid4(),
