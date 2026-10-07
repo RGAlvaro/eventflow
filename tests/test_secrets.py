@@ -19,6 +19,7 @@ from eventflow.models import (
     Endpoint,
     EndpointSecretVersion,
     Event,
+    ManagementAudit,
     Organization,
 )
 from eventflow.rotate_master import rotate_master_key
@@ -169,6 +170,9 @@ def test_master_rotation_reencrypts_active_and_retained_versions(
         monkeypatch.setenv("EVENTFLOW_ENCRYPTION_KEYS", json.dumps(old_keys))
         monkeypatch.setenv("EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID", old_active)
         with engine.begin() as connection:
+            connection.execute(
+                delete(ManagementAudit).where(ManagementAudit.organization_id == tenant)
+            )
             connection.execute(
                 delete(EndpointSecretVersion).where(
                     EndpointSecretVersion.endpoint_id == endpoint_id
