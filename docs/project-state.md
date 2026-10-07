@@ -4,12 +4,12 @@ Actualizado: 2026-10-07. Esta es una **foto breve del presente** para orientar l
 
 | Aspecto | Estado |
 | --- | --- |
-| Hito activo | Hito 3 en curso: seguridad y límites backend en `feat/hito3-backend-security`. |
-| Último corte | `docs/work/hito3-backend-security/` abierto; diseño P-05/P-06 fusionado mediante PR #6. |
-| Producto existente | Núcleo fiable del hito 2. En la rama activa se inició cifrado autenticado de secretos, migración 0004 y cabecera de versión; todavía no hay frontend ni gestión pública de claves y destinos. |
-| Última evidencia | PR draft #8, CI de la rama, ejecución 37600800012: migración 0004 y `alembic check` correctos, suite completa sin omisiones, Ruff, formato y mypy correctos. Incluye conversión de una base con secreto previo. Local: 19 pruebas pasadas y 16 omitidas por falta de PostgreSQL. |
-| Decisiones inmediatas | P-05/P-06 tienen contrato de diseño. La implementación P-05 está incompleta; gestión, rotación, límites y retención siguen pendientes. P-08 detallará bloqueo de salida y custodia de claves del VPS. |
-| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; integración PostgreSQL/Redis comprobada en CI. El corte permanece abierto por funcionalidad pendiente, no por infraestructura. |
-| Próxima acción | Implementar y comprobar primero cifrado de secretos, versión de firma y migración; continuar con gestión autorizada y límites de ingesta. |
+| Hito activo | Hito 3 implementado y verificado en la PR #8; hito 4 siguiente. |
+| Último corte | `docs/work/hito3-backend-security/`: P-05/P-06, gestión, límites y retención implementados. |
+| Producto existente | Backend con ingesta, entrega recuperable, gestión tenant, cifrado y rotación de secretos, cuotas y purga. Aún no hay API de consulta para la UI ni frontend. |
+| Última evidencia | PR #8, ejecución 37639852892: migraciones 0004–0006 y `alembic check` correctos; 45 pruebas, ninguna omitida, con PostgreSQL y Redis reales; Ruff, formato y mypy correctos. |
+| Decisiones inmediatas | D-15 fija aprovisionamiento de la primera credencial `manage` mediante comando de operador. P-10/P-11 corresponden al hito 4; P-08 concretará custodia de claves y reglas de salida del VPS. |
+| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; integración PostgreSQL/Redis comprobada en CI. Ningún bloqueo funcional del hito 3. |
+| Próxima acción | Comenzar hito 4 con P-07, P-10 y P-11; después calibrar límites en hito 5. |
 
 Actualiza esta tabla cuando cambie el hito, el corte, una capacidad comprobada, un bloqueo o la siguiente acción. Mantén el detalle de comandos, pruebas y motivos en la entrada correspondiente del log humano, sin copiar aquí su cronología.

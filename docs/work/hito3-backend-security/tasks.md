@@ -1,10 +1,10 @@
 # Tareas
 
-- [ ] Cifrar secretos de firma existentes y nuevos; utilidad, migración y pruebas de autenticidad/ausencia de clave y conversión de datos previos pasaron en CI. Falta conectar la creación pública de endpoints.
-- [ ] Identificar versión de secreto en webhook y probar receptor durante rotación. La cabecera se emite; faltan rotación y prueba de receptor.
-- [ ] Gestionar claves API y credencial `manage` con revocación y tenant.
-- [ ] Gestionar endpoints y suscripciones con SSRF y cuotas.
-- [ ] Autorizar replay público y auditar actor.
-- [ ] Aplicar bucket Redis, cuota diaria y capacidad pendiente con respuestas estables.
-- [ ] Purgar agregados terminales y probar carreras con replay.
-- [ ] Ejecutar revisión de fiabilidad, suite completa, migraciones, lint, tipos, CI y merge.
+- [x] Cifrar secretos de firma existentes y nuevos; migración 0004 y pruebas de autenticidad, ausencia de clave y conversión de datos previos.
+- [x] Identificar versión de secreto en webhook y probar verificación de ambas versiones durante rotación, incluida recifra de la clave maestra.
+- [x] Gestionar claves API y credencial `manage` con aprovisionamiento de operador, revocación y aislamiento de tenant.
+- [x] Gestionar endpoints y suscripciones con política SSRF y cuotas transaccionales.
+- [x] Autorizar replay de gestión y auditar actor y generación.
+- [x] Aplicar bucket Redis, cuota diaria y capacidad pendiente con respuestas estables.
+- [x] Purgar agregados terminales y comprobar que replay y trabajo pendiente impiden una purga indebida.
+- [x] Revisar fiabilidad y ejecutar suite completa sin omisiones, migraciones, lint, tipos y CI en la PR #8.
