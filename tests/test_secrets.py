@@ -4,8 +4,12 @@ import os
 import uuid
 
 import pytest
-from sqlalchemy import delete, func, insert, select
+from alembic.config import Config
+from sqlalchemy import create_engine, delete, func, insert, select, text
+from sqlalchemy.engine import make_url
 
+from alembic import command
+from eventflow.config import get_settings
 from eventflow.delivery import claim_delivery, make_sync_engine
 from eventflow.models import Delivery, DeliveryAttempt, Endpoint, Event, Organization
 from eventflow.secrets import SecretUnavailable, decrypt_secret, encrypt_secret
@@ -116,3 +120,69 @@ def test_missing_master_key_does_not_consume_delivery_attempt(
             connection.execute(delete(Endpoint).where(Endpoint.id == endpoint_id))
             connection.execute(delete(Organization).where(Organization.id == tenant))
         engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
+)
+def test_migration_encrypts_existing_endpoint_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    base_url = make_url(os.environ["EVENTFLOW_TEST_DATABASE_URL"]).set(
+        drivername="postgresql+psycopg"
+    )
+    database_name = "eventflow_migration_" + uuid.uuid4().hex
+    migration_url = base_url.set(database=database_name)
+    admin_engine = create_engine(base_url, isolation_level="AUTOCOMMIT")
+    tenant_id, endpoint_id = uuid.uuid4(), uuid.uuid4()
+    try:
+        with admin_engine.connect() as connection:
+            connection.execute(text(f"CREATE DATABASE {database_name}"))
+        with monkeypatch.context() as context:
+            context.setenv(
+                "EVENTFLOW_DATABASE_URL", migration_url.render_as_string(hide_password=False)
+            )
+            get_settings.cache_clear()
+            command.upgrade(Config("alembic.ini"), "0003_failure_concurrency")
+            migration_engine = create_engine(migration_url)
+            try:
+                with migration_engine.begin() as connection:
+                    connection.execute(insert(Organization).values(id=tenant_id, name="legacy"))
+                    connection.execute(
+                        text(
+                            "INSERT INTO endpoints "
+                            "(id, organization_id, url, signing_secret_ciphertext, active) "
+                            "VALUES (:id, :organization_id, :url, :secret, true)"
+                        ),
+                        {
+                            "id": endpoint_id,
+                            "organization_id": tenant_id,
+                            "url": "https://example.com/hook",
+                            "secret": b"legacy-secret",
+                        },
+                    )
+                command.upgrade(Config("alembic.ini"), "head")
+                with migration_engine.connect() as connection:
+                    row = connection.execute(
+                        select(
+                            Endpoint.signing_secret_key_id,
+                            Endpoint.signing_secret_ciphertext,
+                            Endpoint.signing_secret_version,
+                        ).where(Endpoint.id == endpoint_id)
+                    ).one()
+                    assert row.signing_secret_ciphertext != b"legacy-secret"
+                    assert (
+                        decrypt_secret(
+                            row.signing_secret_key_id,
+                            row.signing_secret_ciphertext,
+                            tenant_id,
+                            endpoint_id,
+                            row.signing_secret_version,
+                        )
+                        == b"legacy-secret"
+                    )
+            finally:
+                migration_engine.dispose()
+    finally:
+        get_settings.cache_clear()
+        with admin_engine.connect() as connection:
+            connection.execute(text(f"DROP DATABASE IF EXISTS {database_name}"))
+        admin_engine.dispose()
