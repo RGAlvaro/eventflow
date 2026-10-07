@@ -126,11 +126,11 @@ def test_missing_master_key_does_not_consume_delivery_attempt(
     not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
 )
 def test_migration_encrypts_existing_endpoint_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    base_url = make_url(os.environ["EVENTFLOW_TEST_DATABASE_URL"]).set(
-        drivername="postgresql+psycopg"
-    )
+    async_base_url = make_url(os.environ["EVENTFLOW_TEST_DATABASE_URL"])
+    base_url = async_base_url.set(drivername="postgresql+psycopg")
     database_name = "eventflow_migration_" + uuid.uuid4().hex
     migration_url = base_url.set(database=database_name)
+    migration_settings_url = async_base_url.set(database=database_name)
     admin_engine = create_engine(base_url, isolation_level="AUTOCOMMIT")
     tenant_id, endpoint_id = uuid.uuid4(), uuid.uuid4()
     try:
@@ -138,7 +138,8 @@ def test_migration_encrypts_existing_endpoint_secret(monkeypatch: pytest.MonkeyP
             connection.execute(text(f"CREATE DATABASE {database_name}"))
         with monkeypatch.context() as context:
             context.setenv(
-                "EVENTFLOW_DATABASE_URL", migration_url.render_as_string(hide_password=False)
+                "EVENTFLOW_DATABASE_URL",
+                migration_settings_url.render_as_string(hide_password=False),
             )
             get_settings.cache_clear()
             command.upgrade(Config("alembic.ini"), "0003_failure_concurrency")
