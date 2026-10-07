@@ -25,9 +25,25 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 La API lee `EVENTFLOW_DATABASE_URL`, `EVENTFLOW_REDIS_URL` y la clave de cifrado (véase `.env.example`). Si la base aún no está migrada, la migración también puede ejecutarse dentro de Compose con `docker compose run --rm api alembic upgrade head`. `/health/live` indica que el proceso atiende peticiones; `/health/ready` comprueba PostgreSQL y Redis.
 
-El despachador consulta cada 10 s el outbox y las entregas pendientes o con lease vencido en PostgreSQL; Celery consume los avisos desde Redis. El worker limita a cuatro tareas en el contenedor y la base limita a cuatro entregas HTTP activas entre todos los workers. Para observarlos: `docker compose logs -f dispatcher worker`. Las filas de endpoint y las claves se crean con fixtures por ahora; no hay API de configuración pública. El receptor HTTP de loopback solo se habilita con `EVENTFLOW_ENVIRONMENT=test` (o `development`) y `EVENTFLOW_LOCAL_TEST_RECEIVER_URL` igual a la URL exacta del receptor.
+El despachador consulta cada 10 s el outbox y las entregas pendientes o con lease vencido en PostgreSQL; Celery consume los avisos desde Redis. El worker limita a cuatro tareas en el contenedor y la base limita a cuatro entregas HTTP activas entre todos los workers. Para observarlos: `docker compose logs -f dispatcher worker`. El receptor HTTP de loopback solo se habilita con `EVENTFLOW_ENVIRONMENT=test` (o `development`) y `EVENTFLOW_LOCAL_TEST_RECEIVER_URL` igual a la URL exacta del receptor.
 
-En el hito 2, un replay se solicita solo mediante el comando interno `uv run --locked python -m eventflow.replay <delivery-uuid>`. El comando pide la clave de gestión sin mostrarla en los argumentos del proceso y acepta únicamente una entrega `dead_lettered` de su organización. La clave de gestión sigue viniendo de una fixture: aún no hay API pública para emitirla.
+## Aprovisionamiento y rotación de credenciales
+
+Con la migración aplicada y acceso al entorno del servidor, el operador crea una organización y su primera credencial `manage`:
+
+```bash
+uv run --locked python -m eventflow.bootstrap "Nombre de la organización"
+```
+
+El comando imprime el UUID y la clave de gestión **una sola vez**. Entrégala por un canal seguro; PostgreSQL guarda su hash, no el valor bruto. La API `/api/v1/management` usa `Authorization: Bearer <clave manage>` para emitir y revocar claves, crear destinos y suscripciones, preparar y activar secretos de firma y solicitar replay. Las respuestas de creación de clave y secreto muestran el valor una sola vez; las listas solo incluyen metadatos. La clave `publish` solo publica eventos. El comando interno `uv run --locked python -m eventflow.replay <delivery-uuid>` sigue disponible para operación manual: pide la clave sin mostrarla en los argumentos del proceso.
+
+Para rotar la clave maestra de cifrado, conserva la antigua en `EVENTFLOW_ENCRYPTION_KEYS`, añade una nueva entrada y cambia `EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID` al nuevo identificador en API y worker. Con ambos identificadores aún disponibles, ejecuta:
+
+```bash
+uv run --locked python -m eventflow.rotate_master
+```
+
+El comando vuelve a cifrar el secreto activo y todas sus versiones conservadas, endpoint por endpoint, y comunica cuántos cambió. Antes de retirar la clave antigua, consulta que ninguna fila de `endpoints.signing_secret_key_id` ni `endpoint_secret_versions.encryption_key_id` la referencia; verifica la operación también en una copia restaurada de PostgreSQL. Retira la clave antigua solo después de esa comprobación. El despachador elimina las versiones de firma retiradas tras su ventana de 24 horas y los agregados de eventos terminales tras 30 días; conserva copias de seguridad según el procedimiento del VPS.
 
 ## Suite backend completa
 

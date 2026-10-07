@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import json
 import os
 import uuid
@@ -10,9 +12,18 @@ from sqlalchemy.engine import make_url
 
 from alembic import command
 from eventflow.config import get_settings
-from eventflow.delivery import claim_delivery, make_sync_engine
-from eventflow.models import Delivery, DeliveryAttempt, Endpoint, Event, Organization
+from eventflow.delivery import ClaimedDelivery, claim_delivery, make_sync_engine
+from eventflow.models import (
+    Delivery,
+    DeliveryAttempt,
+    Endpoint,
+    EndpointSecretVersion,
+    Event,
+    Organization,
+)
+from eventflow.rotate_master import rotate_master_key
 from eventflow.secrets import SecretUnavailable, decrypt_secret, encrypt_secret
+from eventflow.webhook import signed_request
 from tests.support import sealed_secret
 
 
@@ -52,6 +63,120 @@ def test_missing_key_fails_closed_and_master_key_can_rotate(
     assert decrypt_secret(new_id, new_ciphertext, tenant, endpoint, 1) == b"old-secret"
     with pytest.raises(SecretUnavailable):
         decrypt_secret(old_id, old_ciphertext, tenant, endpoint, 1)
+
+
+def test_receiver_can_verify_versions_during_signing_secret_rotation() -> None:
+    receiver_keys = {1: b"first-secret", 2: b"second-secret"}
+    for version, secret in receiver_keys.items():
+        claim = ClaimedDelivery(
+            delivery_id=uuid.uuid4(),
+            organization_id=uuid.uuid4(),
+            attempt_id=uuid.uuid4(),
+            token=uuid.uuid4(),
+            event_id=uuid.uuid4(),
+            generation=1,
+            event_type="order.created",
+            payload={"number": 7},
+            url="https://example.com/hook",
+            secret=secret,
+            key_id=version,
+        )
+        body, headers = signed_request(claim)
+        selected = receiver_keys[int(headers["X-EventFlow-Key-Id"])]
+        expected = hmac.new(
+            selected,
+            headers["X-EventFlow-Timestamp"].encode("ascii") + b"." + body,
+            hashlib.sha256,
+        ).hexdigest()
+        assert hmac.compare_digest(headers["X-EventFlow-Signature"], f"v1={expected}")
+
+
+@pytest.mark.skipif(
+    not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
+)
+def test_master_rotation_reencrypts_active_and_retained_versions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = make_sync_engine()
+    tenant, endpoint_id = uuid.uuid4(), uuid.uuid4()
+    old_keys = json.loads(os.environ["EVENTFLOW_ENCRYPTION_KEYS"])
+    old_active = os.environ["EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID"]
+    old_id, active_ciphertext = encrypt_secret(b"active-secret", tenant, endpoint_id, 2)
+    _, retained_ciphertext = encrypt_secret(b"retained-secret", tenant, endpoint_id, 1)
+    try:
+        with engine.begin() as connection:
+            connection.execute(insert(Organization).values(id=tenant, name="master-rotation"))
+            connection.execute(
+                insert(Endpoint).values(
+                    id=endpoint_id,
+                    organization_id=tenant,
+                    url="https://example.com/hook",
+                    signing_secret_key_id=old_id,
+                    signing_secret_ciphertext=active_ciphertext,
+                    signing_secret_version=2,
+                    active=True,
+                )
+            )
+            connection.execute(
+                insert(EndpointSecretVersion),
+                [
+                    dict(
+                        id=uuid.uuid4(),
+                        organization_id=tenant,
+                        endpoint_id=endpoint_id,
+                        version=version,
+                        encryption_key_id=old_id,
+                        ciphertext=ciphertext,
+                        status=status,
+                    )
+                    for version, ciphertext, status in (
+                        (1, retained_ciphertext, "retiring"),
+                        (2, active_ciphertext, "active"),
+                    )
+                ],
+            )
+        new_key = base64.b64encode(b"N" * 32).decode("ascii")
+        monkeypatch.setenv("EVENTFLOW_ENCRYPTION_KEYS", json.dumps({**old_keys, "new": new_key}))
+        monkeypatch.setenv("EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID", "new")
+        assert rotate_master_key(engine) == 1
+        assert rotate_master_key(engine) == 0
+        monkeypatch.setenv("EVENTFLOW_ENCRYPTION_KEYS", json.dumps({"new": new_key}))
+        with engine.connect() as connection:
+            current = connection.execute(
+                select(Endpoint.signing_secret_key_id, Endpoint.signing_secret_ciphertext).where(
+                    Endpoint.id == endpoint_id
+                )
+            ).one()
+            versions = connection.execute(
+                select(
+                    EndpointSecretVersion.version,
+                    EndpointSecretVersion.encryption_key_id,
+                    EndpointSecretVersion.ciphertext,
+                ).where(EndpointSecretVersion.endpoint_id == endpoint_id)
+            ).all()
+        assert current.signing_secret_key_id == "new"
+        assert (
+            decrypt_secret("new", current.signing_secret_ciphertext, tenant, endpoint_id, 2)
+            == b"active-secret"
+        )
+        assert {
+            item.version: decrypt_secret(
+                item.encryption_key_id, item.ciphertext, tenant, endpoint_id, item.version
+            )
+            for item in versions
+        } == {1: b"retained-secret", 2: b"active-secret"}
+    finally:
+        monkeypatch.setenv("EVENTFLOW_ENCRYPTION_KEYS", json.dumps(old_keys))
+        monkeypatch.setenv("EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID", old_active)
+        with engine.begin() as connection:
+            connection.execute(
+                delete(EndpointSecretVersion).where(
+                    EndpointSecretVersion.endpoint_id == endpoint_id
+                )
+            )
+            connection.execute(delete(Endpoint).where(Endpoint.id == endpoint_id))
+            connection.execute(delete(Organization).where(Organization.id == tenant))
+        engine.dispose()
 
 
 @pytest.mark.skipif(
