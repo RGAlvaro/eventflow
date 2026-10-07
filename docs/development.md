@@ -6,6 +6,14 @@ Esta guía reúne los comandos operativos del repositorio. `AGENTS.md` y la skil
 
 Requiere Python 3.12, `uv` 0.11.16 y Docker Compose. Las credenciales de `compose.yaml` son solo de desarrollo y los puertos se publican en loopback.
 
+Antes de migrar o arrancar servicios, copia `.env.example` a `.env` y sustituye el valor de `EVENTFLOW_ENCRYPTION_KEYS` por un objeto JSON con una clave propia de 32 bytes codificada en base64. Para generar el valor del objeto sin reutilizar una clave de otro entorno:
+
+```bash
+python3 -c 'import base64,json,secrets; print(json.dumps({"dev":base64.b64encode(secrets.token_bytes(32)).decode()}))'
+```
+
+Mantén `EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID=dev`. La API y el worker necesitan el mismo conjunto de claves; Compose toma esas variables de `.env`. Si ya existen endpoints, conserva la clave al actualizar o restaurar la base: la migración 0004 cifra sus secretos y detiene la operación si no puede leer la clave. `.env` está excluido de Git.
+
 ```bash
 uv sync --locked
 docker compose up -d --wait postgres redis
@@ -15,7 +23,7 @@ curl -fsS http://127.0.0.1:8000/health/live
 curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
-La API lee `EVENTFLOW_DATABASE_URL` y `EVENTFLOW_REDIS_URL` (véase `.env.example`). Si la base aún no está migrada, la migración también puede ejecutarse dentro de Compose con `docker compose run --rm api alembic upgrade head`. `/health/live` indica que el proceso atiende peticiones; `/health/ready` comprueba PostgreSQL y Redis.
+La API lee `EVENTFLOW_DATABASE_URL`, `EVENTFLOW_REDIS_URL` y la clave de cifrado (véase `.env.example`). Si la base aún no está migrada, la migración también puede ejecutarse dentro de Compose con `docker compose run --rm api alembic upgrade head`. `/health/live` indica que el proceso atiende peticiones; `/health/ready` comprueba PostgreSQL y Redis.
 
 El despachador consulta cada 10 s el outbox y las entregas pendientes o con lease vencido en PostgreSQL; Celery consume los avisos desde Redis. El worker limita a cuatro tareas en el contenedor y la base limita a cuatro entregas HTTP activas entre todos los workers. Para observarlos: `docker compose logs -f dispatcher worker`. Las filas de endpoint y las claves se crean con fixtures por ahora; no hay API de configuración pública. El receptor HTTP de loopback solo se habilita con `EVENTFLOW_ENVIRONMENT=test` (o `development`) y `EVENTFLOW_LOCAL_TEST_RECEIVER_URL` igual a la URL exacta del receptor.
 

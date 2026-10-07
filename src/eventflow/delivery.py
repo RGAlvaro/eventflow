@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from eventflow.config import get_settings
 from eventflow.models import Delivery, DeliveryAttempt, Endpoint, Event, OutboxMessage
 from eventflow.retry import backoff_seconds, classify_result, retry_after_seconds
+from eventflow.secrets import decrypt_secret
 
 Publisher = Callable[[uuid.UUID], None]
 
@@ -40,6 +41,7 @@ class ClaimedDelivery:
     payload: dict[str, object]
     url: str
     secret: bytes
+    key_id: int = 1
 
 
 def due_filter(now: datetime):  # type: ignore[no-untyped-def]
@@ -93,6 +95,13 @@ def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | 
         )
         if endpoint is None or event is None:
             raise RuntimeError("Delivery has no tenant-matched endpoint or event")
+        secret = decrypt_secret(
+            endpoint.signing_secret_key_id,
+            endpoint.signing_secret_ciphertext,
+            delivery.organization_id,
+            endpoint.id,
+            endpoint.signing_secret_version,
+        )
         generation_attempts = (
             session.scalar(
                 select(func.count())
@@ -193,7 +202,8 @@ def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | 
             event.event_type,
             event.payload,
             endpoint.url,
-            endpoint.signing_secret_ciphertext,
+            secret,
+            endpoint.signing_secret_version,
         )
 
 

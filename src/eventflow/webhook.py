@@ -114,6 +114,7 @@ def signed_request(claim: ClaimedDelivery) -> tuple[bytes, dict[str, str]]:
         "X-EventFlow-Event-Id": str(claim.event_id),
         "X-EventFlow-Delivery-Id": str(claim.delivery_id),
         "X-EventFlow-Generation": str(claim.generation),
+        "X-EventFlow-Key-Id": str(claim.key_id),
         "X-EventFlow-Timestamp": timestamp,
         "X-EventFlow-Signature": f"v1={signature}",
     }

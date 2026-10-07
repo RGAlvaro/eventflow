@@ -4,12 +4,12 @@ Actualizado: 2026-10-07. Esta es una **foto breve del presente** para orientar l
 
 | Aspecto | Estado |
 | --- | --- |
-| Hito activo | Hito 2 verificado; el diseño P-05/P-06 prepara el hito 3. |
-| Último corte | `docs/work/failure-concurrency/`, entregado mediante PR #5; diseño P-05/P-06 fusionado mediante PR #6. |
-| Producto existente | Ingesta idempotente por organización, reintentos y dead letter, replay interno auditado, límites compartidos globales y por endpoint, pausa por 429 y recuperación desde PostgreSQL. Todavía no hay frontend ni gestión pública de claves y destinos. |
-| Última evidencia | CI de la PR #6, ejecución 37594689062: migraciones y `alembic check` correctos; 32 pruebas pasadas sin omisiones con PostgreSQL y Redis reales; Ruff, formato y mypy correctos. La PR es documental; esta suite no demuestra aún P-05/P-06 en ejecución. |
-| Decisiones inmediatas | P-05/P-06 tienen contrato de diseño; cifrado, rotación, autorización, límites y retención siguen sin implementar ni probar. P-08 detallará el bloqueo de salida y custodia de claves del VPS antes de exposición pública. |
-| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; la integración completa se ejecutó en CI. No hay bloqueo del producto por ello. |
-| Próxima acción | Abrir un corte funcional del hito 3 para implementar P-05/P-06, empezando por cifrado de secretos y gestión autorizada de claves y endpoints. |
+| Hito activo | Hito 3 en curso: seguridad y límites backend en `feat/hito3-backend-security`. |
+| Último corte | `docs/work/hito3-backend-security/` abierto; diseño P-05/P-06 fusionado mediante PR #6. |
+| Producto existente | Núcleo fiable del hito 2. En la rama activa se inició cifrado autenticado de secretos, migración 0004 y cabecera de versión; todavía no hay frontend ni gestión pública de claves y destinos. |
+| Última evidencia | Rama actual: Ruff, formato y mypy correctos; 19 pruebas locales pasadas, 16 omitidas por falta de PostgreSQL. La última integración completa es CI de la PR #6 con 32 pruebas pasadas; aún no verifica esta rama. |
+| Decisiones inmediatas | P-05/P-06 tienen contrato de diseño. La implementación P-05 está incompleta; gestión, rotación, límites y retención siguen pendientes. P-08 detallará bloqueo de salida y custodia de claves del VPS. |
+| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; las pruebas PostgreSQL/Redis y la migración aplicada requieren CI. El corte permanece abierto hasta verificarlas sin omisiones. |
+| Próxima acción | Implementar y comprobar primero cifrado de secretos, versión de firma y migración; continuar con gestión autorizada y límites de ingesta. |
 
 Actualiza esta tabla cuando cambie el hito, el corte, una capacidad comprobada, un bloqueo o la siguiente acción. Mantén el detalle de comandos, pruebas y motivos en la entrada correspondiente del log humano, sin copiar aquí su cronología.

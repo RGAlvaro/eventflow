@@ -29,6 +29,8 @@ services:
       EVENTFLOW_ENVIRONMENT: development
       EVENTFLOW_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@postgres:5432/eventflow
       EVENTFLOW_REDIS_URL: redis://redis:6379/0
+      EVENTFLOW_ENCRYPTION_KEYS: ${EVENTFLOW_ENCRYPTION_KEYS:?Set development encryption keys}
+      EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID: ${EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID:?Set active key ID}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -52,6 +54,8 @@ services:
       EVENTFLOW_ENVIRONMENT: development
       EVENTFLOW_DATABASE_URL: postgresql+asyncpg://eventflow:eventflow@postgres:5432/eventflow
       EVENTFLOW_REDIS_URL: redis://redis:6379/0
+      EVENTFLOW_ENCRYPTION_KEYS: ${EVENTFLOW_ENCRYPTION_KEYS:?Set development encryption keys}
+      EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID: ${EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID:?Set active key ID}
     depends_on:
       postgres:
         condition: service_healthy

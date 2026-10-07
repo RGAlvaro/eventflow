@@ -19,6 +19,7 @@ from eventflow.models import (
     OutboxMessage,
     Subscription,
 )
+from tests.support import sealed_secret
 
 
 @pytest.mark.skipif(
@@ -59,7 +60,7 @@ async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
                         "id": endpoints[index],
                         "organization_id": tenants[index],
                         "url": "https://example.com/hook",
-                        "signing_secret_ciphertext": b"fixture",
+                        **sealed_secret(b"fixture", tenants[index], endpoints[index]),
                         "active": True,
                     }
                     for index in range(2)

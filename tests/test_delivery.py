@@ -53,6 +53,7 @@ from eventflow.webhook import (
     validated_destination,
 )
 from eventflow.worker import deliver
+from tests.support import sealed_secret
 
 
 def test_ssrf_rejects_private_dns_and_unsafe_urls(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,6 +141,7 @@ def test_https_request_uses_pinned_ip_sni_and_disables_proxy_and_redirects(
     assert isinstance(request, httpx.Request)
     assert str(request.url) == "https://8.8.8.8/deliver"
     assert request.headers["Host"] == "hook.example.com"
+    assert request.headers["X-EventFlow-Key-Id"] == "1"
     assert request.extensions["sni_hostname"] == "hook.example.com"
     assert captured["trust_env"] is False
     assert captured["follow_redirects"] is False
@@ -339,7 +341,7 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
                     id=endpoint_id,
                     organization_id=tenant_id,
                     url=url,
-                    signing_secret_ciphertext=secret,
+                    **sealed_secret(secret, tenant_id, endpoint_id),
                     active=True,
                 )
             )
@@ -618,7 +620,7 @@ def test_worker_death_recovers_from_postgresql(monkeypatch: pytest.MonkeyPatch) 
                     id=endpoint_id,
                     organization_id=tenant_id,
                     url=url,
-                    signing_secret_ciphertext=b"death-test-key",
+                    **sealed_secret(b"death-test-key", tenant_id, endpoint_id),
                     active=True,
                 )
             )

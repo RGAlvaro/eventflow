@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     max_event_bytes: int = Field(default=256 * 1024, gt=0)
     environment: Literal["development", "test", "production"] = "production"
     local_test_receiver_url: str | None = None
+    encryption_keys: str | None = None
+    active_encryption_key_id: str | None = None
 
 
 @lru_cache

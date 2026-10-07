@@ -18,6 +18,7 @@ from eventflow.models import (
     OutboxMessage,
     Subscription,
 )
+from tests.support import sealed_secret
 
 
 @pytest.mark.skipif(
@@ -51,14 +52,14 @@ async def test_ingest_commits_tenant_scoped_delivery_and_outbox_without_broker()
                     "id": endpoint_a,
                     "organization_id": tenant_a,
                     "url": "https://example.com/a",
-                    "signing_secret_ciphertext": b"fixture-only",
+                    **sealed_secret(b"fixture-only", tenant_a, endpoint_a),
                     "active": True,
                 },
                 {
                     "id": endpoint_b,
                     "organization_id": tenant_b,
                     "url": "https://example.com/b",
-                    "signing_secret_ciphertext": b"fixture-only",
+                    **sealed_secret(b"fixture-only", tenant_b, endpoint_b),
                     "active": True,
                 },
             ],

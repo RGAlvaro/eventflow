@@ -57,6 +57,10 @@ class Endpoint(Base):
     )
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     signing_secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    signing_secret_key_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    signing_secret_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
     pause_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

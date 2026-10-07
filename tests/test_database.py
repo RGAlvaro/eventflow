@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from eventflow.models import Endpoint, Organization, Subscription
+from tests.support import sealed_secret
 
 
 @pytest.mark.skipif(
@@ -29,7 +30,7 @@ async def test_initial_migration_on_postgresql() -> None:
                 "replay_audits",
             } <= set(tables)
             result = await connection.execute(text("SELECT version_num FROM alembic_version"))
-            assert result.scalar_one() == "0003_failure_concurrency"
+            assert result.scalar_one() == "0004_encrypted_signing_secrets"
     finally:
         await engine.dispose()
 
@@ -52,7 +53,7 @@ async def test_subscription_cannot_reference_another_tenant_endpoint() -> None:
                         id=endpoint_id,
                         organization_id=tenant_a,
                         url="https://example.com/hook",
-                        signing_secret_ciphertext=b"fixture-only",
+                        **sealed_secret(b"fixture-only", tenant_a, endpoint_id),
                         active=True,
                     )
                 )
