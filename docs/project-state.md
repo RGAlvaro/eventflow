@@ -9,7 +9,7 @@ Actualizado: 2026-10-07. Esta es una **foto breve del presente** para orientar l
 | Producto existente | Backend con ingesta, entrega recuperable, gestión tenant, cifrado y rotación de secretos, cuotas y purga. Aún no hay API de consulta para la UI ni frontend. |
 | Última evidencia | PR #8, ejecución 37639852892: migraciones 0004–0006 y `alembic check` correctos; 45 pruebas, ninguna omitida, con PostgreSQL y Redis reales; Ruff, formato y mypy correctos. |
 | Decisiones inmediatas | D-15 fija aprovisionamiento de la primera credencial `manage` mediante comando de operador. P-10/P-11 corresponden al hito 4; P-08 concretará custodia de claves y reglas de salida del VPS. |
-| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; integración PostgreSQL/Redis comprobada en CI. Ningún bloqueo funcional del hito 3. |
-| Próxima acción | Comenzar hito 4 con P-07, P-10 y P-11; después calibrar límites en hito 5. |
+| Bloqueos externos | Esta sesión WSL no tiene Docker integrado; integración PostgreSQL/Redis comprobada en CI. GitHub devuelve HTTP 500 al marcar lista o fusionar la PR #8; el corte sigue abierto hasta el merge. |
+| Próxima acción | Reintentar marcar lista y fusionar la PR #8 cuando GitHub acepte mutaciones; después comenzar hito 4 con P-07, P-10 y P-11. |
 
 Actualiza esta tabla cuando cambie el hito, el corte, una capacidad comprobada, un bloqueo o la siguiente acción. Mantén el detalle de comandos, pruebas y motivos en la entrada correspondiente del log humano, sin copiar aquí su cronología.
