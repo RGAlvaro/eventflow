@@ -202,7 +202,7 @@ async def test_management_keys_endpoints_rotation_and_tenant_scope(
         async with engine.connect() as connection:
             endpoint = (
                 await connection.execute(select(Endpoint).where(Endpoint.id == endpoint_id))
-            ).scalar_one()
+            ).one()
             assert endpoint.signing_secret_version == 2
             assert (
                 decrypt_secret(
@@ -215,16 +215,12 @@ async def test_management_keys_endpoints_rotation_and_tenant_scope(
                 == secret2
             )
             versions = (
-                (
-                    await connection.execute(
-                        select(EndpointSecretVersion)
-                        .where(EndpointSecretVersion.endpoint_id == endpoint_id)
-                        .order_by(EndpointSecretVersion.version)
-                    )
+                await connection.execute(
+                    select(EndpointSecretVersion)
+                    .where(EndpointSecretVersion.endpoint_id == endpoint_id)
+                    .order_by(EndpointSecretVersion.version)
                 )
-                .scalars()
-                .all()
-            )
+            ).all()
             assert [item.status for item in versions] == ["retiring", "active"]
             assert versions[0].expires_at is not None
             assert (
@@ -264,7 +260,7 @@ async def test_operator_bootstrap_stores_only_management_key_hash(
                 await connection.execute(
                     select(ApiKey).where(ApiKey.organization_id == organization_id)
                 )
-            ).scalar_one()
+            ).one()
             assert row.scope == "manage" and row.key_hash == hash_api_key(raw_key)
             assert raw_key != row.key_hash
     finally:
