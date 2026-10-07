@@ -5,6 +5,7 @@ import uuid
 
 import httpx
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -28,6 +29,8 @@ from tests.support import sealed_secret
 async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
     engine = create_async_engine(os.environ["EVENTFLOW_TEST_DATABASE_URL"])
     app.state.engine = engine
+    redis = Redis.from_url(os.getenv("EVENTFLOW_REDIS_URL", "redis://localhost:6379/0"))
+    app.state.redis = redis
     tenants = [uuid.uuid4(), uuid.uuid4()]
     endpoints = [uuid.uuid4(), uuid.uuid4()]
     keys = [secrets.token_urlsafe(32), secrets.token_urlsafe(32)]
@@ -142,6 +145,7 @@ async def test_concurrent_idempotency_conflict_and_tenant_scope() -> None:
                 == 2
             )
     finally:
+        await redis.aclose()
         async with engine.begin() as connection:
             await connection.execute(
                 delete(OutboxMessage).where(OutboxMessage.organization_id.in_(tenants))

@@ -1,15 +1,37 @@
 import hashlib
 import json
+import math
 import uuid
+from datetime import UTC, datetime, time, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from eventflow.models import ApiKey, Delivery, Endpoint, Event, OutboxMessage, Subscription
+from eventflow.models import (
+    ApiKey,
+    Delivery,
+    Endpoint,
+    Event,
+    Organization,
+    OutboxMessage,
+    Subscription,
+)
+
+DAILY_EVENTS = 1_000
+PENDING_DELIVERIES = 10_000
 
 
 class IdempotencyConflict(Exception):
+    pass
+
+
+class DailyQuotaExceeded(Exception):
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+
+
+class PendingCapacityExceeded(Exception):
     pass
 
 
@@ -49,6 +71,72 @@ async def ingest_event(
     event_id = uuid.uuid4()
     fingerprint = event_fingerprint(event_type, payload) if idempotency_key else None
     async with session.begin():
+        # One tenant row serializes both quota checks and inserts across API instances.
+        tenant = await session.scalar(
+            select(Organization.id).where(Organization.id == organization_id).with_for_update()
+        )
+        if tenant is None:
+            raise RuntimeError("Publishing organization disappeared")
+        now = await session.scalar(select(func.clock_timestamp()))
+        assert now is not None
+        if idempotency_key is not None:
+            original = (
+                await session.execute(
+                    select(Event.id, Event.fingerprint).where(
+                        Event.organization_id == organization_id,
+                        Event.idempotency_key == idempotency_key,
+                    )
+                )
+            ).one_or_none()
+            if original is not None:
+                if original.fingerprint != fingerprint:
+                    raise IdempotencyConflict()
+                return uuid.UUID(str(original.id))
+        utc_now = now.astimezone(UTC)
+        day_start = datetime.combine(utc_now.date(), time.min, tzinfo=UTC)
+        next_day = day_start + timedelta(days=1)
+        today_count = (
+            await session.scalar(
+                select(func.count())
+                .select_from(Event)
+                .where(
+                    Event.organization_id == organization_id,
+                    Event.created_at >= day_start,
+                    Event.created_at < next_day,
+                )
+            )
+            or 0
+        )
+        if today_count >= DAILY_EVENTS:
+            raise DailyQuotaExceeded(max(1, math.ceil((next_day - utc_now).total_seconds())))
+        endpoint_ids = (
+            await session.scalars(
+                select(Endpoint.id)
+                .join(
+                    Subscription,
+                    (Subscription.endpoint_id == Endpoint.id)
+                    & (Subscription.organization_id == Endpoint.organization_id),
+                )
+                .where(
+                    Endpoint.organization_id == organization_id,
+                    Endpoint.active.is_(True),
+                    Subscription.event_type == event_type,
+                )
+            )
+        ).all()
+        outstanding = (
+            await session.scalar(
+                select(func.count())
+                .select_from(Delivery)
+                .where(
+                    Delivery.organization_id == organization_id,
+                    Delivery.status.in_(("pending", "processing", "retry_scheduled")),
+                )
+            )
+            or 0
+        )
+        if outstanding + len(endpoint_ids) > PENDING_DELIVERIES:
+            raise PendingCapacityExceeded()
         if idempotency_key is not None:
             inserted = await session.scalar(
                 insert(Event)
@@ -59,6 +147,7 @@ async def ingest_event(
                     payload=payload,
                     idempotency_key=idempotency_key,
                     fingerprint=fingerprint,
+                    terminal_at=now if not endpoint_ids else None,
                 )
                 .on_conflict_do_nothing(
                     index_elements=[Event.organization_id, Event.idempotency_key]
@@ -77,21 +166,6 @@ async def ingest_event(
                 if original.fingerprint != fingerprint:
                     raise IdempotencyConflict()
                 return uuid.UUID(str(original.id))
-        endpoint_ids = (
-            await session.scalars(
-                select(Endpoint.id)
-                .join(
-                    Subscription,
-                    (Subscription.endpoint_id == Endpoint.id)
-                    & (Subscription.organization_id == Endpoint.organization_id),
-                )
-                .where(
-                    Endpoint.organization_id == organization_id,
-                    Endpoint.active.is_(True),
-                    Subscription.event_type == event_type,
-                )
-            )
-        ).all()
         if idempotency_key is None:
             session.add(
                 Event(
@@ -99,6 +173,7 @@ async def ingest_event(
                     organization_id=organization_id,
                     event_type=event_type,
                     payload=payload,
+                    terminal_at=now if not endpoint_ids else None,
                 )
             )
             await session.flush()

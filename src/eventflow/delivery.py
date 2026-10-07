@@ -52,6 +52,30 @@ def due_filter(now: datetime):  # type: ignore[no-untyped-def]
     )
 
 
+def mark_event_terminal_if_complete(
+    session: Session, organization_id: uuid.UUID, event_id: uuid.UUID, now: datetime
+) -> None:
+    event = session.scalar(
+        select(Event)
+        .where(Event.id == event_id, Event.organization_id == organization_id)
+        .with_for_update()
+    )
+    if event is None:
+        raise RuntimeError("Delivery event disappeared")
+    session.flush()
+    outstanding = session.scalar(
+        select(func.count())
+        .select_from(Delivery)
+        .where(
+            Delivery.event_id == event_id,
+            Delivery.organization_id == organization_id,
+            Delivery.status.not_in(("succeeded", "dead_lettered")),
+        )
+    )
+    if outstanding == 0 and event.terminal_at is None:
+        event.terminal_at = now
+
+
 def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | None:
     with Session(engine) as session, session.begin():
         # Serialize the global capacity check across worker processes.
@@ -119,6 +143,9 @@ def claim_delivery(engine: Engine, delivery_id: uuid.UUID) -> ClaimedDelivery | 
             delivery.lease_token = None
             delivery.lease_expires_at = None
             delivery.next_attempt_at = None
+            mark_event_terminal_if_complete(
+                session, delivery.organization_id, delivery.event_id, now
+            )
             return None
         if endpoint.pause_until is not None and endpoint.pause_until > now:
             return None
@@ -253,6 +280,7 @@ def finish_delivery(
         delivery.lease_expires_at = None
         if outcome == "success":
             delivery.status = "succeeded"
+            mark_event_terminal_if_complete(session, claim.organization_id, delivery.event_id, now)
             return
         generation_attempts = (
             session.scalar(
@@ -269,6 +297,7 @@ def finish_delivery(
         if outcome == "permanent" or generation_attempts >= MAX_ATTEMPTS_PER_GENERATION:
             delivery.status = "dead_lettered"
             delivery.next_attempt_at = None
+            mark_event_terminal_if_complete(session, claim.organization_id, delivery.event_id, now)
             return
         next_attempt_at = now + timedelta(seconds=backoff_seconds(generation_attempts))
         if response_status == 429:
