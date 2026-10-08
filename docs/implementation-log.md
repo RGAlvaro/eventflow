@@ -8,6 +8,12 @@ Cada entrada debe permitir reconstruir **qué cambió y por qué**, **qué pasos
 
 ## Entradas
 
+### 2026-10-08 — Fusión verificada del hito 3
+
+- **Cambio y motivo:** se publicó el commit documental que registraba el bloqueo temporal de GitHub y se marcó la PR #8 como lista cuando la API volvió a aceptar escrituras. Se fusionó por *squash* como `18b8a21`; `main` local quedó sincronizada con `origin/main`. Un squash reúne los commits del corte en uno solo en la rama principal y conserva el historial detallado en la PR.
+- **Verificación observada:** las ejecuciones 37741957291 y 37741963724 pasaron para el último commit de la rama: migración, `alembic check`, suite completa de 45 pruebas sin omisiones con PostgreSQL/Redis, Ruff, formato y mypy. GitHub confirmó `state=MERGED` y `mergedAt=2026-10-08T07:13:25Z`; `git status -sb` mostró `main` limpio y al día con `origin/main`. Esta comprobación confirma la integración del corte, no sustituye las pruebas de red y backup del futuro VPS.
+- **Pendiente:** iniciar el hito 4 con P-07, P-10 y P-11. Los límites iniciales se calibrarán con carga en el hito 5.
+
 ### 2026-10-07 — Gestión tenant, admisión y retención del hito 3
 
 - **Cambio y motivo:** se completó el corte de seguridad y límites en la PR #8. La primera organización y su clave `manage` se crean con un comando de operador conforme a D-15; la API posterior emite claves `publish` o `manage`, permite revocarlas y gestiona endpoints, suscripciones, secretos de firma y replay. Una clave bruta se muestra solo en su creación y PostgreSQL guarda su hash; los secretos de firma se guardan cifrados. Cada operación busca el recurso por su ID **y** por la organización de la credencial. Este segundo filtro impide que conocer un UUID de otro tenant otorgue acceso.
