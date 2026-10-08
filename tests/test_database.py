@@ -32,7 +32,7 @@ async def test_initial_migration_on_postgresql() -> None:
                 "management_audits",
             } <= set(tables)
             result = await connection.execute(text("SELECT version_num FROM alembic_version"))
-            assert result.scalar_one() == "0006_management"
+            assert result.scalar_one() == "0007_observation_indexes"
     finally:
         await engine.dispose()
 

@@ -113,7 +113,7 @@ class Event(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "id"),
         UniqueConstraint("organization_id", "idempotency_key"),
-        Index("ix_events_tenant_created", "organization_id", "created_at"),
+        Index("ix_events_tenant_created", "organization_id", "created_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -142,6 +142,7 @@ class Delivery(Base):
         UniqueConstraint("organization_id", "id"),
         UniqueConstraint("event_id", "endpoint_id"),
         Index("ix_deliveries_work", "status", "next_attempt_at", "lease_expires_at"),
+        Index("ix_deliveries_tenant_created", "organization_id", "created_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -169,6 +170,7 @@ class DeliveryAttempt(Base):
         ),
         UniqueConstraint("delivery_id", "number"),
         Index("ix_delivery_attempts_started_at", "started_at"),
+        Index("ix_attempts_tenant_started", "organization_id", "delivery_id", "started_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -11,6 +11,7 @@ from eventflow.api import ApiError, new_request_id, router
 from eventflow.config import get_settings
 from eventflow.db import make_engine
 from eventflow.management import router as management_router
+from eventflow.observations import router as observations_router
 
 
 async def dependency_status(engine: AsyncEngine, redis: Redis) -> dict[str, str]:
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="EventFlow", lifespan=lifespan)
 app.include_router(router)
 app.include_router(management_router)
+app.include_router(observations_router)
 
 
 @app.middleware("http")
