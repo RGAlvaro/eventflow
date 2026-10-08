@@ -55,6 +55,7 @@ async def test_operator_cookie_csrf_tenant_audit_logout_and_rotation() -> None:
     username = "demo-" + uuid.uuid4().hex[:12]
     manage_key = secrets.token_urlsafe(32)
     try:
+        await redis.delete("eventflow:login:global")
         async with engine.begin() as connection:
             await connection.execute(
                 insert(Organization),
@@ -221,6 +222,7 @@ async def test_operator_cookie_csrf_tenant_audit_logout_and_rotation() -> None:
                     )
                 ) is not None
     finally:
+        await redis.delete("eventflow:login:global")
         await redis.delete(f"eventflow:login:{token_hash(username)}")
         await clean_organizations(engine, [tenant, other_tenant])
         await redis.aclose()
@@ -238,7 +240,9 @@ async def test_login_is_shared_rate_limited_and_fails_closed_without_redis(
     redis = Redis.from_url(os.environ["EVENTFLOW_REDIS_URL"])
     app.state.engine, app.state.redis = engine, redis
     username = "absent-" + uuid.uuid4().hex[:12]
+    global_names = ["absent-" + uuid.uuid4().hex[:12] for _ in range(3)]
     try:
+        await redis.delete("eventflow:login:global")
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="https://test"
         ) as client:
@@ -252,6 +256,17 @@ async def test_login_is_shared_rate_limited_and_fails_closed_without_redis(
             )
             assert limited.status_code == 429 and int(limited.headers["retry-after"]) >= 1
 
+            await redis.delete("eventflow:login:global")
+            monkeypatch.setattr("eventflow.ingest_limits.LOGIN_GLOBAL_BURST", 2)
+            monkeypatch.setattr("eventflow.ingest_limits.LOGIN_GLOBAL_PER_SECOND", 0.001)
+            varied = [
+                await client.post(
+                    "/api/v1/session/login", json={"username": name, "password": "wrong"}
+                )
+                for name in global_names
+            ]
+            assert [item.status_code for item in varied] == [401, 401, 429]
+
             async def unavailable(*args: object) -> None:
                 raise RedisError("unavailable")
 
@@ -262,6 +277,9 @@ async def test_login_is_shared_rate_limited_and_fails_closed_without_redis(
             )
             assert failed.status_code == 503 and failed.json()["code"] == "login_limit_unavailable"
     finally:
+        await redis.delete("eventflow:login:global")
         await redis.delete(f"eventflow:login:{token_hash(username)}")
+        for name in global_names:
+            await redis.delete(f"eventflow:login:{token_hash(name)}")
         await redis.aclose()
         await engine.dispose()
