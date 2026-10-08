@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from eventflow.api import ApiError, new_request_id, router
 from eventflow.config import get_settings
 from eventflow.db import make_engine
+from eventflow.management import router as management_router
 
 
 async def dependency_status(engine: AsyncEngine, redis: Redis) -> dict[str, str]:
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="EventFlow", lifespan=lifespan)
 app.include_router(router)
+app.include_router(management_router)
 
 
 @app.middleware("http")
@@ -53,6 +55,7 @@ async def request_id_middleware(request: Request, call_next):  # type: ignore[no
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
+        headers=exc.headers,
         content={
             "code": exc.code,
             "message": exc.message,

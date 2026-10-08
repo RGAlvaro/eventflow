@@ -4,19 +4,30 @@ import uuid
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from eventflow.config import get_settings
-from eventflow.ingest import IdempotencyConflict, ingest_event, publishing_organization
+from eventflow.ingest import (
+    DailyQuotaExceeded,
+    IdempotencyConflict,
+    PendingCapacityExceeded,
+    ingest_event,
+    publishing_organization,
+)
+from eventflow.ingest_limits import admit_ingest
 
 router = APIRouter(prefix="/api/v1")
 
 
 class ApiError(Exception):
-    def __init__(self, status_code: int, code: str, message: str) -> None:
+    def __init__(
+        self, status_code: int, code: str, message: str, headers: dict[str, str] | None = None
+    ) -> None:
         self.status_code = status_code
         self.code = code
         self.message = message
+        self.headers = headers
 
 
 class PublishRequest(BaseModel):
@@ -54,6 +65,22 @@ async def publish_event(request: Request) -> dict[str, str]:
         organization_id = await publishing_organization(session, raw_key)
         if organization_id is None:
             raise ApiError(401, "unauthorized", "A valid publication API key is required")
+    try:
+        retry_after = await admit_ingest(request.app.state.redis, organization_id)
+    except RedisError:
+        raise ApiError(
+            503,
+            "ingest_limit_unavailable",
+            "Ingestion is temporarily unavailable",
+            {"Retry-After": "5"},
+        ) from None
+    if retry_after is not None:
+        raise ApiError(
+            429,
+            "ingest_rate_limited",
+            "Organization ingestion rate exceeded",
+            {"Retry-After": str(retry_after)},
+        )
     idempotency_key = request.headers.get("idempotency-key")
     if idempotency_key is not None and not re.fullmatch(
         r"[A-Za-z0-9][A-Za-z0-9._~-]{0,127}", idempotency_key
@@ -79,6 +106,20 @@ async def publish_event(request: Request) -> dict[str, str]:
         except IdempotencyConflict:
             raise ApiError(
                 409, "idempotency_conflict", "Idempotency-Key was used for another event"
+            ) from None
+        except DailyQuotaExceeded as exc:
+            raise ApiError(
+                429,
+                "ingest_daily_quota_exceeded",
+                "Organization daily event quota exceeded",
+                {"Retry-After": str(exc.retry_after)},
+            ) from None
+        except PendingCapacityExceeded:
+            raise ApiError(
+                503,
+                "ingest_capacity_exhausted",
+                "Organization delivery capacity exhausted",
+                {"Retry-After": "5"},
             ) from None
     return {"event_id": str(event_id), "request_id": str(request.state.request_id)}
 

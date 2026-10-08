@@ -37,6 +37,7 @@ from eventflow.models import (
 from eventflow.replay import ReplayDenied, ReplayUnavailable, replay_delivery
 from eventflow.webhook import send_webhook
 from eventflow.worker import deliver
+from tests.support import sealed_secret
 
 
 def seed_deliveries(
@@ -53,7 +54,7 @@ def seed_deliveries(
                     id=endpoint_id,
                     organization_id=tenant,
                     url="https://example.com/hook",
-                    signing_secret_ciphertext=b"fixture",
+                    **sealed_secret(b"fixture", tenant, endpoint_id),
                     active=True,
                 )
             )

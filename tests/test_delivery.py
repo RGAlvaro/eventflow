@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 import pytest
 from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -53,6 +54,7 @@ from eventflow.webhook import (
     validated_destination,
 )
 from eventflow.worker import deliver
+from tests.support import sealed_secret
 
 
 def test_ssrf_rejects_private_dns_and_unsafe_urls(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,6 +142,7 @@ def test_https_request_uses_pinned_ip_sni_and_disables_proxy_and_redirects(
     assert isinstance(request, httpx.Request)
     assert str(request.url) == "https://8.8.8.8/deliver"
     assert request.headers["Host"] == "hook.example.com"
+    assert request.headers["X-EventFlow-Key-Id"] == "1"
     assert request.extensions["sni_hostname"] == "hook.example.com"
     assert captured["trust_env"] is False
     assert captured["follow_redirects"] is False
@@ -339,7 +342,7 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
                     id=endpoint_id,
                     organization_id=tenant_id,
                     url=url,
-                    signing_secret_ciphertext=secret,
+                    **sealed_secret(secret, tenant_id, endpoint_id),
                     active=True,
                 )
             )
@@ -469,7 +472,11 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
 
         async def publish_via_api() -> uuid.UUID:
             async_engine = create_async_engine(os.environ["EVENTFLOW_TEST_DATABASE_URL"])
+            async_redis = AsyncRedis.from_url(
+                os.getenv("EVENTFLOW_REDIS_URL", "redis://localhost:6379/0")
+            )
             app.state.engine = async_engine
+            app.state.redis = async_redis
             try:
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -483,6 +490,7 @@ def test_recovery_duplicate_notice_expired_lease_and_signed_receiver(
                     return uuid.UUID(response.json()["event_id"])
             finally:
                 await async_engine.dispose()
+                await async_redis.aclose()
 
         event_two = asyncio.run(publish_via_api())
         with engine.connect() as connection:
@@ -618,7 +626,7 @@ def test_worker_death_recovers_from_postgresql(monkeypatch: pytest.MonkeyPatch) 
                     id=endpoint_id,
                     organization_id=tenant_id,
                     url=url,
-                    signing_secret_ciphertext=b"death-test-key",
+                    **sealed_secret(b"death-test-key", tenant_id, endpoint_id),
                     active=True,
                 )
             )

@@ -17,6 +17,8 @@ from eventflow.delivery import (
     make_sync_engine,
     reconcile_deliveries,
 )
+from eventflow.retention import purge_expired_secret_versions, purge_terminal_events
+from eventflow.secrets import SecretUnavailable
 from eventflow.webhook import UnsafeDestination, send_webhook
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,11 @@ def deadline_reached(_signum: int, _frame: object) -> None:
 def deliver(delivery_id: str) -> None:
     engine = make_sync_engine()
     try:
-        claim = claim_delivery(engine, uuid.UUID(delivery_id))
+        try:
+            claim = claim_delivery(engine, uuid.UUID(delivery_id))
+        except SecretUnavailable:
+            logger.error("delivery_secret_unavailable delivery_id=%s", delivery_id)
+            return
         if claim is None:
             return
         old_handler = signal.signal(signal.SIGALRM, deadline_reached)
@@ -88,6 +94,8 @@ def run_dispatcher(once: bool = False) -> None:
             try:
                 dispatch_outbox(engine, publish)
                 reconcile_deliveries(engine, publish)
+                purge_terminal_events(engine)
+                purge_expired_secret_versions(engine)
             except Exception:
                 logger.error("dispatcher_cycle_failed")
                 if once:

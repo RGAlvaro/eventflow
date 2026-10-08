@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from eventflow.delivery import make_sync_engine
 from eventflow.ingest import hash_api_key
-from eventflow.models import ApiKey, Delivery, OutboxMessage, ReplayAudit
+from eventflow.models import ApiKey, Delivery, Event, OutboxMessage, ReplayAudit
 
 
 class ReplayDenied(Exception):
@@ -44,11 +44,19 @@ def replay_delivery(engine: Engine, delivery_id: uuid.UUID, management_key: str)
             raise ReplayDenied()
         if delivery.status != "dead_lettered":
             raise ReplayUnavailable()
+        event = session.scalar(
+            select(Event)
+            .where(Event.id == delivery.event_id, Event.organization_id == actor.organization_id)
+            .with_for_update()
+        )
+        if event is None:
+            raise RuntimeError("Delivery event disappeared")
         delivery.generation += 1
         delivery.status = "pending"
         delivery.next_attempt_at = None
         delivery.lease_token = None
         delivery.lease_expires_at = None
+        event.terminal_at = None
         session.add(
             ReplayAudit(
                 id=uuid.uuid4(),

@@ -18,6 +18,7 @@ El dossier v0.1 es una propuesta generada por ChatGPT. Sus etiquetas `DECIDED` n
 | D-12 | Aceptada | La firma v1 cubre timestamp en segundos Unix y bytes exactos del cuerpo enviado; los IDs de evento/entrega y la generación son estables en reintentos, la generación sube en replay y el timestamp se renueva en cada intento. El receptor puede limitar antigüedad y deduplicar por entrega y generación. |
 | D-13 | Aceptada | Los límites de envío se aplican entre todos los workers por endpoint y globalmente; una respuesta 429 puede pausar solo su endpoint. PostgreSQL conserva el momento de reintento y pausa; los valores y algoritmo se cierran en P-09. |
 | D-14 | Aceptada | El MVP final incluye interfaz responsive y demo técnica en un único VPS Ubuntu 24.04 LTS. Docker Compose conserva la topología API/worker/despachador/PostgreSQL/Redis; el proxy HTTPS sirve la UI y es el único punto público. Se completará el backend fiable antes de construir la interfaz. |
+| D-15 | Aceptada (2026-10-07, directriz del propietario) | La primera organización y su credencial `manage` se crean mediante un comando de operador en el servidor; no se abre un alta pública con secreto de bootstrap. El comando muestra la credencial una sola vez y guarda únicamente su hash. La API de gestión posterior exige una credencial `manage` válida de la organización. P-10 definirá la sesión del navegador sin exponer esta credencial. |
 
 ## Decisiones por cerrar
 

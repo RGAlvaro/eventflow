@@ -57,11 +57,38 @@ class Endpoint(Base):
     )
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     signing_secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    signing_secret_key_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    signing_secret_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
     pause_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class EndpointSecretVersion(Base):
+    __tablename__ = "endpoint_secret_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "endpoint_id"], ["endpoints.organization_id", "endpoints.id"]
+        ),
+        UniqueConstraint("organization_id", "endpoint_id", "version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    endpoint_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    encryption_key_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Subscription(Base):
@@ -86,6 +113,7 @@ class Event(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "id"),
         UniqueConstraint("organization_id", "idempotency_key"),
+        Index("ix_events_tenant_created", "organization_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -99,6 +127,7 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    terminal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Delivery(Base):
@@ -198,5 +227,26 @@ class ReplayAudit(Base):
     actor_key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     generation: Mapped[int] = mapped_column(Integer, nullable=False)
     requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ManagementAudit(Base):
+    __tablename__ = "management_audits"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "actor_key_id"], ["api_keys.organization_id", "api_keys.id"]
+        ),
+        Index("ix_management_audits_tenant_time", "organization_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+    actor_key_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

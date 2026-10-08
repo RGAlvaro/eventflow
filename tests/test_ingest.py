@@ -4,6 +4,7 @@ import uuid
 
 import httpx
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -18,15 +19,17 @@ from eventflow.models import (
     OutboxMessage,
     Subscription,
 )
+from tests.support import sealed_secret
 
 
 @pytest.mark.skipif(
     not os.getenv("EVENTFLOW_TEST_DATABASE_URL"), reason="PostgreSQL integration DSN unset"
 )
-async def test_ingest_commits_tenant_scoped_delivery_and_outbox_without_broker() -> None:
+async def test_ingest_commits_tenant_scoped_delivery_and_outbox() -> None:
     engine = create_async_engine(os.environ["EVENTFLOW_TEST_DATABASE_URL"])
     app.state.engine = engine
-    app.state.redis = object()  # Broker unavailable: acceptance depends only on PostgreSQL.
+    redis = Redis.from_url(os.getenv("EVENTFLOW_REDIS_URL", "redis://localhost:6379/0"))
+    app.state.redis = redis
     tenant_a, tenant_b = uuid.uuid4(), uuid.uuid4()
     endpoint_a, endpoint_b = uuid.uuid4(), uuid.uuid4()
     raw_key = secrets.token_urlsafe(32)
@@ -51,14 +54,14 @@ async def test_ingest_commits_tenant_scoped_delivery_and_outbox_without_broker()
                     "id": endpoint_a,
                     "organization_id": tenant_a,
                     "url": "https://example.com/a",
-                    "signing_secret_ciphertext": b"fixture-only",
+                    **sealed_secret(b"fixture-only", tenant_a, endpoint_a),
                     "active": True,
                 },
                 {
                     "id": endpoint_b,
                     "organization_id": tenant_b,
                     "url": "https://example.com/b",
-                    "signing_secret_ciphertext": b"fixture-only",
+                    **sealed_secret(b"fixture-only", tenant_b, endpoint_b),
                     "active": True,
                 },
             ],
@@ -158,3 +161,4 @@ async def test_ingest_commits_tenant_scoped_delivery_and_outbox_without_broker()
             await connection.execute(delete(ApiKey).where(ApiKey.organization_id.in_(tenant_ids)))
             await connection.execute(delete(Organization).where(Organization.id.in_(tenant_ids)))
         await engine.dispose()
+        await redis.aclose()
