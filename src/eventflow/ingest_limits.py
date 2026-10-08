@@ -27,7 +27,7 @@ else
     retry_after = math.ceil((1 - tokens) / tonumber(ARGV[2]))
 end
 redis.call('HSET', KEYS[1], 'tokens', tokens, 'at', now)
-redis.call('EXPIRE', KEYS[1], 4)
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
 return {allowed, retry_after}
 """
 
@@ -42,6 +42,23 @@ async def admit_ingest(redis: Redis, organization_id: uuid.UUID) -> int | None:
             f"eventflow:ingest:{organization_id}",
             str(BURST_TOKENS),
             str(TOKENS_PER_SECOND),
+            "4",
+        ),
+    )
+    return None if int(allowed) == 1 else max(1, math.ceil(float(retry_after)))
+
+
+async def admit_login(redis: Redis, username_hash: str) -> int | None:
+    """Allow five login attempts in a burst, replenishing one every 12 seconds."""
+    allowed, retry_after = await cast(
+        Awaitable[list[int]],
+        redis.eval(
+            TOKEN_BUCKET_SCRIPT,
+            1,
+            f"eventflow:login:{username_hash}",
+            "5",
+            str(1 / 12),
+            "120",
         ),
     )
     return None if int(allowed) == 1 else max(1, math.ceil(float(retry_after)))

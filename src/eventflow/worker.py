@@ -17,7 +17,11 @@ from eventflow.delivery import (
     make_sync_engine,
     reconcile_deliveries,
 )
-from eventflow.retention import purge_expired_secret_versions, purge_terminal_events
+from eventflow.retention import (
+    purge_expired_operator_sessions,
+    purge_expired_secret_versions,
+    purge_terminal_events,
+)
 from eventflow.secrets import SecretUnavailable
 from eventflow.webhook import UnsafeDestination, send_webhook
 
@@ -96,6 +100,7 @@ def run_dispatcher(once: bool = False) -> None:
                 reconcile_deliveries(engine, publish)
                 purge_terminal_events(engine)
                 purge_expired_secret_versions(engine)
+                purge_expired_operator_sessions(engine)
             except Exception:
                 logger.error("dispatcher_cycle_failed")
                 if once:

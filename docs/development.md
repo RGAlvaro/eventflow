@@ -37,6 +37,18 @@ uv run --locked python -m eventflow.bootstrap "Nombre de la organización"
 
 El comando imprime el UUID y la clave de gestión **una sola vez**. Entrégala por un canal seguro; PostgreSQL guarda su hash, no el valor bruto. La API `/api/v1/management` usa `Authorization: Bearer <clave manage>` para emitir y revocar claves, crear destinos y suscripciones, preparar y activar secretos de firma y solicitar replay. Las respuestas de creación de clave y secreto muestran el valor una sola vez; las listas solo incluyen metadatos. La clave `publish` solo publica eventos. El comando interno `uv run --locked python -m eventflow.replay <delivery-uuid>` sigue disponible para operación manual: pide la clave sin mostrarla en los argumentos del proceso.
 
+## Acceso del operador de demo
+
+El operador del servidor crea un usuario de navegador para una organización ya existente con el UUID impreso por `eventflow.bootstrap`:
+
+```bash
+uv run --locked python -m eventflow.operator_admin create <organization-uuid> demo-operator
+```
+
+El comando imprime una contraseña aleatoria una sola vez; solo su hash `scrypt` queda en PostgreSQL. `rotate demo-operator` genera otra contraseña e invalida sus sesiones; `disable demo-operator` deshabilita el usuario e invalida sus sesiones. Ejecuta esos subcomandos en el servidor, no desde el navegador. La API usa Redis para limitar intentos de login por nombre de usuario y PostgreSQL para comprobar cada sesión y su vencimiento absoluto de ocho horas.
+
+El navegador envía usuario y contraseña a `POST /api/v1/session/login` mediante JSON. Recibe una cookie de sesión opaca `HttpOnly` y una cookie `eventflow_csrf` legible por la aplicación, ambas `SameSite=Strict`; producción marca ambas `Secure`. `GET /api/v1/session` devuelve metadatos de operador y expiración. Las mutaciones bajo `/api/v1/management` y `POST /api/v1/session/logout` con cookie requieren `X-CSRF-Token` igual a `eventflow_csrf`; las lecturas no. La sesión nunca contiene la clave API `manage`. En producción sirve la UI y API desde el mismo origen HTTPS; HTTP sin `Secure` se permite solo con `EVENTFLOW_ENVIRONMENT=development` o `test` en desarrollo aislado.
+
 Para rotar la clave maestra de cifrado, conserva la antigua en `EVENTFLOW_ENCRYPTION_KEYS`, añade una nueva entrada y cambia `EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID` al nuevo identificador en API y worker. Con ambos identificadores aún disponibles, ejecuta:
 
 ```bash

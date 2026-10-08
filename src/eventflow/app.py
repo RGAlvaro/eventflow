@@ -12,6 +12,7 @@ from eventflow.config import get_settings
 from eventflow.db import make_engine
 from eventflow.management import router as management_router
 from eventflow.observations import router as observations_router
+from eventflow.operator_session import router as session_router
 
 
 async def dependency_status(engine: AsyncEngine, redis: Redis) -> dict[str, str]:
@@ -43,6 +44,7 @@ app = FastAPI(title="EventFlow", lifespan=lifespan)
 app.include_router(router)
 app.include_router(management_router)
 app.include_router(observations_router)
+app.include_router(session_router)
 
 
 @app.middleware("http")
@@ -50,6 +52,8 @@ async def request_id_middleware(request: Request, call_next):  # type: ignore[no
     request.state.request_id = new_request_id()
     response = await call_next(request)
     response.headers["X-Request-Id"] = str(request.state.request_id)
+    if request.url.path.startswith(("/api/v1/management", "/api/v1/session")):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 

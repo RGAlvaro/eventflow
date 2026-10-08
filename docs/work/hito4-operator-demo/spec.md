@@ -1,11 +1,12 @@
 # Hito 4 — Operación e interfaz de demostración
 
-Rama: `feat/hito4-observability-api`. Requisitos: EF-09, EF-10 y EF-11. Decisiones: P-07 cerrada; D-16/D-17 fijan las opciones de acceso y receptor, y P-10/P-11 concretarán sus contratos.
+Rama: `feat/hito4-observability-api`. Requisitos: EF-09, EF-10 y EF-11. Decisiones: P-07 y P-10 cerradas; D-17 fija receptor HTTPS externo y P-11 concretará su contrato.
 
 ## Escenarios observables
 
 1. Un actor `manage` consulta eventos, entregas e intentos de su organización con páginas estables, filtros exactos y detalles sanitizados. Una credencial `publish`, revocada o de otro tenant no lee datos. Un cursor inválido o de otro filtro/tenant se rechaza.
 2. Desde una sesión de operador protegida, la interfaz publica ejemplos y muestra estados, intentos, próxima ejecución y replay obtenidos del backend real, con estados de carga/error/vacío, teclado y anchos de 360, 768 y 1280 px.
+   La sesión se inicia con usuario y contraseña propios, vence y puede revocarse; las mutaciones con cookie exigen CSRF. La auditoría identifica al operador sin exponer una clave API al navegador.
 3. Un receptor controlado verifica la firma, registra solo datos sanitizados y ofrece escenarios 200, 503→200, 429 y fallo hasta `dead_lettered`. El operador puede repetirlos sin crear destinos internos arbitrarios.
 4. Logs y métricas permiten seguir request, evento, entrega e intento sin exponer claves, secretos, cabeceras de autorización ni cuerpos de respuesta. Salud y guía operativa permiten diagnosticar dependencias.
 5. La instalación y CI ejecutan pruebas y build del frontend además de la suite backend. El recorrido E2E usa PostgreSQL, Redis, worker y receptor reales.

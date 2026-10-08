@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -41,6 +42,43 @@ class ApiKey(Base):
     key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Operator(Base):
+    __tablename__ = "operators"
+    __table_args__ = (UniqueConstraint("organization_id", "id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+    username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class OperatorSession(Base):
+    __tablename__ = "operator_sessions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "operator_id"], ["operators.organization_id", "operators.id"]
+        ),
+        Index("ix_operator_sessions_expiry", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    operator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    csrf_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -218,6 +256,13 @@ class ReplayAudit(Base):
         ForeignKeyConstraint(
             ["organization_id", "actor_key_id"], ["api_keys.organization_id", "api_keys.id"]
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "actor_operator_id"], ["operators.organization_id", "operators.id"]
+        ),
+        CheckConstraint(
+            "(actor_key_id IS NOT NULL) <> (actor_operator_id IS NOT NULL)",
+            name="ck_replay_audits_one_actor",
+        ),
         UniqueConstraint("delivery_id", "generation"),
     )
 
@@ -226,7 +271,8 @@ class ReplayAudit(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
     delivery_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    actor_key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    actor_key_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    actor_operator_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     generation: Mapped[int] = mapped_column(Integer, nullable=False)
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -239,6 +285,13 @@ class ManagementAudit(Base):
         ForeignKeyConstraint(
             ["organization_id", "actor_key_id"], ["api_keys.organization_id", "api_keys.id"]
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "actor_operator_id"], ["operators.organization_id", "operators.id"]
+        ),
+        CheckConstraint(
+            "NOT (actor_key_id IS NOT NULL AND actor_operator_id IS NOT NULL)",
+            name="ck_management_audits_one_actor",
+        ),
         Index("ix_management_audits_tenant_time", "organization_id", "created_at"),
     )
 
@@ -247,6 +300,7 @@ class ManagementAudit(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
     actor_key_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    actor_operator_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     action: Mapped[str] = mapped_column(String(40), nullable=False)
     subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(
