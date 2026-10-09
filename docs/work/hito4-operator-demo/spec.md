@@ -1,6 +1,6 @@
 # Hito 4 — Operación e interfaz de demostración
 
-Rama principal: `feat/hito4-observability-api`; P-11 se fusionó desde `feat/hito4-demo-receiver` y el puente de observaciones se implementa en `feat/hito4-receiver-observations`. Requisitos: EF-04, EF-09, EF-10 y EF-11. Decisiones: P-07, P-10 y P-11 cerradas; D-17 fija receptor HTTPS externo.
+Rama principal: `feat/hito4-observability-api`; P-11 y el puente de observaciones se fusionaron desde `feat/hito4-demo-receiver` y `feat/hito4-receiver-observations`. Requisitos: EF-04, EF-09, EF-10 y EF-11. Decisiones: P-07, P-10 y P-11 cerradas; D-17 fija receptor HTTPS externo.
 
 ## Escenarios observables
 
