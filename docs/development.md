@@ -76,6 +76,26 @@ EVENTFLOW_RECEIVER_CONFIG=/ruta/privada/receiver.json uvicorn eventflow.demo_rec
 
 `GET /health/live` comprueba que el proceso atiende peticiones. `GET /observations/<escenario>/<delivery-uuid>` exige `Authorization: Bearer <observation_token>` y devuelve únicamente IDs, generación, número de peticiones, marca de firma verificada, procesado, último código y hora. No envíes ese token al navegador. La transacción de SQLite serializa duplicados y conserva su marca de procesado tras reinicio. En rotación, añade primero la nueva versión `key_id` y conserva la antigua con `not_after` (segundos Unix UTC) hasta el fin de la ventana; activa luego la nueva versión en EventFlow y retira la antigua al vencer. Si se pierde el disco SQLite, no puede presumirse deduplicación de entregas antiguas: el backup y la restauración se definirán en P-08.
 
+### Puente de observación en la API
+
+Solo el proceso **API** de EventFlow recibe otro archivo privado `0600`, situado fuera de Git. Fija una organización, el origen HTTPS público del receptor y los UUID de los endpoints de demo que ya creó la API de gestión. Cada URL guardada en EventFlow debe coincidir exactamente con `<origin>/hooks/<ruta>`; el token es el mismo `observation_token` del receptor, compartido por un canal seguro entre servidores:
+
+```json
+{
+  "organization_id": "UUID_DE_ORGANIZACION_DEMO",
+  "origin": "https://receiver.example.org",
+  "observation_token": "MISMO_TOKEN_PRIVADO_DEL_RECEPTOR",
+  "endpoints": {
+    "UUID_ENDPOINT_SUCCESS": "success",
+    "UUID_ENDPOINT_TRANSIENT": "transient",
+    "UUID_ENDPOINT_RATE_LIMIT": "rate-limit",
+    "UUID_ENDPOINT_REPLAY": "replay"
+  }
+}
+```
+
+Configura `EVENTFLOW_DEMO_RECEIVER_BRIDGE_CONFIG_PATH=/ruta/privada/bridge.json` **en la API**, con acceso de lectura para su usuario. No lo entregues al worker ni a la UI. Tras autenticar `manage` y localizar la entrega en su organización, `GET /api/v1/management/deliveries/<delivery-uuid>/receiver-observation` consulta únicamente un endpoint de esa lista. Comprueba de nuevo que la URL guardada corresponde a la ruta, valida DNS e IP pública y conecta por HTTPS con Host/SNI originales, sin redirecciones ni proxies. La respuesta queda acotada a 32 KiB, validada contra IDs y generación de PostgreSQL; timeout o indisponibilidad devuelven `503` y respuesta incorrecta `502`, sin publicar token ni contenido remoto. La API carga el archivo en cada consulta para permitir actualizar el mapa tras aprovisionar endpoints sin reconstruir la imagen.
+
 Para rotar la clave maestra de cifrado, conserva la antigua en `EVENTFLOW_ENCRYPTION_KEYS`, añade una nueva entrada y cambia `EVENTFLOW_ACTIVE_ENCRYPTION_KEY_ID` al nuevo identificador en API y worker. Con ambos identificadores aún disponibles, ejecuta:
 
 ```bash
