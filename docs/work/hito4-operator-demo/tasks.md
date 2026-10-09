@@ -2,7 +2,7 @@
 
 - [x] Implementar API de consulta paginada y detalles con autorización `manage`, filtros, índices y pruebas PostgreSQL; 46 pruebas sin omisiones en CI de PR #10.
 - [x] Cerrar P-10 e implementar aprovisionamiento, sesión, límites de login, CSRF, revocación y auditoría; 49 pruebas sin omisiones en CI de PR #10.
-- [x] Cerrar P-11 e implementar receptor controlado, cuatro escenarios, firma, deduplicación persistente y prueba con reclamo real del worker; 61 pruebas sin omisiones en local.
+- [x] Cerrar P-11 e implementar receptor controlado, cuatro escenarios, firma, deduplicación persistente y prueba con reclamo real del worker; 61 pruebas sin omisiones en local y PR #11 fusionada tras CI verde.
 - [ ] Conectar observaciones sanitizadas del receptor a una ruta tenant autorizada de EventFlow y a los controles de escenarios de la UI.
 - [ ] Añadir logs, métricas y pruebas de redacción.
 - [ ] Construir UI React responsive, pruebas de teclado/anchos y build en CI.
