@@ -53,7 +53,7 @@ Pruebas unitarias para firmas, transiciones, políticas de retry y validaciones;
 
 ## Interfaz de demostración
 
-La interfaz muestra una ruta guiada corta: elegir un escenario seguro (200, 503→200, 429 o fallo hasta dead letter), publicar un evento de ejemplo, seguir estado e intentos y reintentar mediante replay autorizado. El receptor controlado publica a la API solo resultados sanitizados, incluida la verificación de firma; la pantalla no finge resultados ni lee PostgreSQL directamente. La navegación y los controles funcionan con teclado y en anchos de móvil y escritorio; se muestran carga, errores, permisos insuficientes y estados vacíos. El panel de diagnóstico enlaza IDs de evento, entrega e intento y presenta la próxima ejecución/pausa por rate limit.
+La interfaz muestra una ruta guiada corta: elegir un escenario seguro (200, 503→200, 429 o fallo hasta dead letter), publicar un evento de ejemplo, seguir estado e intentos y reintentar mediante replay autorizado. El backend consulta al receptor controlado con un token de servidor y devuelve a la UI autorizada solo resultados sanitizados, incluida la verificación de firma; comprueba primero el tenant de la entrega solicitada. La pantalla no finge resultados ni lee PostgreSQL directamente. La navegación y los controles funcionan con teclado y en anchos de móvil y escritorio; se muestran carga, errores, permisos insuficientes y estados vacíos. El panel de diagnóstico enlaza IDs de evento, entrega e intento y presenta la próxima ejecución/pausa por rate limit.
 
 ## Despliegue en VPS
 

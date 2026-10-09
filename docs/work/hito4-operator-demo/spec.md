@@ -1,6 +1,6 @@
 # Hito 4 — Operación e interfaz de demostración
 
-Rama: `feat/hito4-observability-api`. Requisitos: EF-09, EF-10 y EF-11. Decisiones: P-07 y P-10 cerradas; D-17 fija receptor HTTPS externo y P-11 concretará su contrato.
+Rama principal: `feat/hito4-observability-api`; corte P-11 en `feat/hito4-demo-receiver` sobre ella. Requisitos: EF-04, EF-09, EF-10 y EF-11. Decisiones: P-07, P-10 y P-11 cerradas; D-17 fija receptor HTTPS externo.
 
 ## Escenarios observables
 
@@ -8,6 +8,7 @@ Rama: `feat/hito4-observability-api`. Requisitos: EF-09, EF-10 y EF-11. Decision
 2. Desde una sesión de operador protegida, la interfaz publica ejemplos y muestra estados, intentos, próxima ejecución y replay obtenidos del backend real, con estados de carga/error/vacío, teclado y anchos de 360, 768 y 1280 px.
    La sesión se inicia con usuario y contraseña propios, vence y puede revocarse; las mutaciones con cookie exigen CSRF. La auditoría identifica al operador sin exponer una clave API al navegador.
 3. Un receptor controlado verifica la firma, registra solo datos sanitizados y ofrece escenarios 200, 503→200, 429 y fallo hasta `dead_lettered`. El operador puede repetirlos sin crear destinos internos arbitrarios.
+   Cada ruta externa está preconfigurada con un secreto propio y acepta solo solicitudes con HMAC v1, timestamp reciente e IDs/generación coincidentes. Reintentos de una generación ya procesada no vuelven a procesarla; un replay usa otra generación. El receptor sobrevive a reinicio y permite consultar el resultado solo con un token de servidor, sin exponer payload ni secretos. El fallo continuo de generación 1 pasa a 200 tras replay en generación 2.
 4. Logs y métricas permiten seguir request, evento, entrega e intento sin exponer claves, secretos, cabeceras de autorización ni cuerpos de respuesta. Salud y guía operativa permiten diagnosticar dependencias.
 5. La instalación y CI ejecutan pruebas y build del frontend además de la suite backend. El recorrido E2E usa PostgreSQL, Redis, worker y receptor reales.
 
