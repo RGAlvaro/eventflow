@@ -4,7 +4,7 @@ import uuid
 from datetime import timedelta
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.engine import CursorResult, Engine
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from eventflow.models import (
     DeliveryAttempt,
     EndpointSecretVersion,
     Event,
+    OperatorSession,
     OutboxMessage,
     ReplayAudit,
 )
@@ -96,6 +97,24 @@ def purge_expired_secret_versions(engine: Engine) -> int:
                 delete(EndpointSecretVersion).where(
                     EndpointSecretVersion.status == "retiring",
                     EndpointSecretVersion.expires_at <= func.clock_timestamp(),
+                )
+            ),
+        )
+        return result.rowcount or 0
+
+
+def purge_expired_operator_sessions(engine: Engine) -> int:
+    with Session(engine) as session, session.begin():
+        now = session.scalar(select(func.clock_timestamp()))
+        assert now is not None
+        result = cast(
+            CursorResult[Any],
+            session.execute(
+                delete(OperatorSession).where(
+                    or_(
+                        OperatorSession.expires_at <= now,
+                        OperatorSession.revoked_at <= now - timedelta(days=1),
+                    )
                 )
             ),
         )
