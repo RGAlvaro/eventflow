@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -13,7 +14,7 @@ from eventflow.app import app
 from eventflow.config import get_settings
 from eventflow.delivery import make_sync_engine
 from eventflow.models import Delivery, Endpoint, Event, Organization, OutboxMessage, Subscription
-from eventflow.operator_admin import create_operator
+from eventflow.operator_admin import change_operator, create_operator
 from tests.support import clean_organizations, sealed_secret
 
 
@@ -115,6 +116,20 @@ async def test_demo_scenario_requires_session_csrf_tenant_and_exact_subscription
             assert summary.status_code == 200
             assert summary.json()["events"] == 1
             assert summary.json()["deliveries"] == {"pending": 1}
+            with monkeypatch.context() as patcher:
+                patcher.setattr("eventflow.demo_scenarios.admit_ingest", AsyncMock(return_value=1))
+                limited = await client.post(route, headers=headers)
+            assert limited.status_code == 429
+            assert limited.headers["Retry-After"] == "1"
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(
+                        select(func.count())
+                        .select_from(Event)
+                        .where(Event.organization_id == tenant)
+                    )
+                    == 1
+                )
             await client.post(
                 "/api/v1/session/login",
                 json={"username": other_username, "password": other_password},
@@ -155,6 +170,8 @@ async def test_demo_scenario_requires_session_csrf_tenant_and_exact_subscription
                     .values(url="https://other.example.org/hook")
                 )
             assert (await client.post(route, headers=headers)).status_code == 503
+            change_operator(sync_engine, username)
+            assert (await client.post(route, headers=headers)).status_code == 401
     finally:
         await clean_organizations(engine, [tenant, other_tenant])
         await redis.aclose()
