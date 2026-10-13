@@ -11,4 +11,4 @@
 - [x] Añadir logs, métricas y pruebas de redacción; contadores tenant, log seguro y prueba en CI verde.
 - [x] Construir UI React responsive, pruebas de teclado/anchos y build en CI; tres anchos y teclado verdes en Chromium.
 - [x] Verificar en Chromium un recorrido real con API, PostgreSQL, Redis, receptor firmado y replay; cuatro pruebas de navegador verdes en CI.
-- [ ] Verificar recorridos E2E y suite completa sin omisiones, revisar fiabilidad, PR verde y merge.
+- [x] Verificar recorridos E2E y suite completa sin omisiones, revisar fiabilidad, PR verde y merge; PR #10 fusionada tras dos checks verdes.
