@@ -1,5 +1,8 @@
+import logging
 from unittest.mock import AsyncMock, patch
 
+import httpx
+import pytest
 from fastapi import Response
 
 from eventflow.app import app, live, ready
@@ -27,3 +30,18 @@ async def test_ready_reports_dependency_failure() -> None:
         "status": "unavailable",
         "dependencies": {"postgresql": "ok", "redis": "unavailable"},
     }
+
+
+async def test_request_log_omits_credentials_and_query(caplog: pytest.LogCaptureFixture) -> None:
+    secret = "private-bearer-key-123"
+    with caplog.at_level(logging.INFO, logger="eventflow.api"):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                f"/health/live?token={secret}", headers={"Authorization": f"Bearer {secret}"}
+            )
+    assert response.status_code == 200
+    assert "request_completed" in caplog.text
+    assert "/health/live" in caplog.text
+    assert secret not in caplog.text

@@ -49,6 +49,18 @@ El comando imprime una contraseña aleatoria una sola vez; solo su hash `scrypt`
 
 El navegador envía usuario y contraseña a `POST /api/v1/session/login` mediante JSON. Recibe una cookie de sesión opaca `HttpOnly` y una cookie `eventflow_csrf` legible por la aplicación, ambas `SameSite=Strict`; producción marca ambas `Secure`. `GET /api/v1/session` devuelve metadatos de operador y expiración. Las mutaciones bajo `/api/v1/management` y `POST /api/v1/session/logout` con cookie requieren `X-CSRF-Token` igual a `eventflow_csrf`; las lecturas no. La sesión nunca contiene la clave API `manage`. En producción sirve la UI y API desde el mismo origen HTTPS; HTTP sin `Secure` se permite solo con `EVENTFLOW_ENVIRONMENT=development` o `test` en desarrollo aislado.
 
+## Interfaz local del hito 4
+
+Requiere Node.js 24 y npm. Con la API local en `127.0.0.1:8000`, Vite sirve la interfaz y reenvía `/api` y `/health` al backend; las cookies siguen en el mismo origen del navegador. Los cuatro escenarios se habilitan al configurar los endpoints HTTPS del receptor, sus suscripciones `demo.success`, `demo.transient`, `demo.rate_limit` y `demo.replay`, y el archivo privado del puente descrito abajo. `GET /api/v1/demo/scenarios` indica cuáles están preparados. `POST /api/v1/demo/scenarios/<ruta>/events` solo admite una sesión de operador con CSRF; crea un evento fijo, su única entrega y su outbox mediante la ingesta transaccional normal. La interfaz no recibe claves API.
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Para verificar la interfaz: `npm test`, `npm run typecheck` y `npm run build` desde `frontend/`. CI ejecuta instalación limpia, pruebas y build junto a la suite backend. `GET /api/v1/management/metrics` da contadores de eventos, estados de entrega e intentos y duración media de intento, siempre para la organización autenticada. La API registra ID de petición, ruta, estado y duración; el worker registra IDs de organización, evento, entrega e intento. Los logs no incluyen cabeceras ni cuerpos y Compose desactiva el access log genérico de Uvicorn.
+
 ## Receptor externo de la demo (P-11)
 
 Instala el mismo paquete en un **host distinto** del VPS de EventFlow. El proceso del receptor escucha solo en loopback; un proxy en ese host publica el dominio DNS público mediante HTTPS/443 con certificado válido y reenvía las rutas `/hooks/` y `/observations/` al puerto local. El proxy debe limitar cada cuerpo a 256 KiB, no registrar cabeceras de autorización ni cuerpos, y permitir `POST` solo en `/hooks/`. El dominio y proveedor se fijarán en P-08 antes del despliegue público. EventFlow registra las cuatro URL `https://<dominio>/hooks/<escenario>` mediante la API de gestión normal: siguen sujetas a la política SSRF de producción. La UI usará esos endpoints preconfigurados y no aceptará URL escrita por el visitante.

@@ -35,6 +35,10 @@ class PendingCapacityExceeded(Exception):
     pass
 
 
+class DemoConfigurationError(Exception):
+    pass
+
+
 def event_fingerprint(event_type: str, payload: dict[str, object]) -> str:
     canonical = json.dumps(
         {"type": event_type, "payload": payload},
@@ -67,6 +71,7 @@ async def ingest_event(
     event_type: str,
     payload: dict[str, object],
     idempotency_key: str | None = None,
+    expected_endpoint: tuple[uuid.UUID, str] | None = None,
 ) -> uuid.UUID:
     event_id = uuid.uuid4()
     fingerprint = event_fingerprint(event_type, payload) if idempotency_key else None
@@ -109,9 +114,9 @@ async def ingest_event(
         )
         if today_count >= DAILY_EVENTS:
             raise DailyQuotaExceeded(max(1, math.ceil((next_day - utc_now).total_seconds())))
-        endpoint_ids = (
-            await session.scalars(
-                select(Endpoint.id)
+        endpoint_rows = (
+            await session.execute(
+                select(Endpoint.id, Endpoint.url)
                 .join(
                     Subscription,
                     (Subscription.endpoint_id == Endpoint.id)
@@ -124,6 +129,11 @@ async def ingest_event(
                 )
             )
         ).all()
+        endpoint_ids = [row.id for row in endpoint_rows]
+        if expected_endpoint is not None and [tuple(row) for row in endpoint_rows] != [
+            expected_endpoint
+        ]:
+            raise DemoConfigurationError()
         outstanding = (
             await session.scalar(
                 select(func.count())

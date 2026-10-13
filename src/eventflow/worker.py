@@ -77,10 +77,13 @@ def deliver(delivery_id: str) -> None:
             signal.signal(signal.SIGALRM, old_handler)
         finish_delivery(engine, claim, response_status, error, retry_after)
         logger.info(
-            "delivery_attempt_completed organization_id=%s delivery_id=%s attempt_id=%s status=%s",
+            "delivery_attempt_completed organization_id=%s event_id=%s delivery_id=%s "
+            "attempt_id=%s generation=%s status=%s",
             claim.organization_id,
+            claim.event_id,
             claim.delivery_id,
             claim.attempt_id,
+            claim.generation,
             response_status if response_status is not None else error,
         )
     finally:

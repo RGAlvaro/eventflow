@@ -7,6 +7,7 @@
   - [x] Configurar puente privado y ruta GET con autorización tenant y URL fija.
   - [x] Verificar SSRF, fallos de red y esquema de respuesta con pruebas HTTP/PostgreSQL; PR #12 fusionada tras CI verde.
   - [ ] Conectar controles de UI cuando exista frontend.
-- [ ] Añadir logs, métricas y pruebas de redacción.
-- [ ] Construir UI React responsive, pruebas de teclado/anchos y build en CI.
+- [ ] Añadir API de escenarios con sesión, CSRF, publicación limitada y prueba PostgreSQL/Redis de trabajo atómico y aislamiento; implementada, pendiente de ejecutar prueba de integración en CI.
+- [ ] Añadir logs, métricas y pruebas de redacción; implementados contadores tenant y log seguro, pendiente de prueba de integración en CI y revisión operativa.
+- [ ] Construir UI React responsive, pruebas de teclado/anchos y build en CI; interfaz, prueba de interacción y build locales listos, pendiente de revisión real en navegador y CI.
 - [ ] Verificar recorridos E2E y suite completa sin omisiones, revisar fiabilidad, PR verde y merge.
