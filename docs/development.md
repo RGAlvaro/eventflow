@@ -59,7 +59,7 @@ npm ci
 npm run dev
 ```
 
-Para verificar la interfaz: `npm test`, `npm run typecheck` y `npm run build` desde `frontend/`. CI ejecuta instalación limpia, pruebas y build junto a la suite backend. `GET /api/v1/management/metrics` da contadores de eventos, estados de entrega e intentos y duración media de intento, siempre para la organización autenticada. La API registra ID de petición, ruta, estado y duración; el worker registra IDs de organización, evento, entrega e intento. Los logs no incluyen cabeceras ni cuerpos y Compose desactiva el access log genérico de Uvicorn.
+Para verificar la interfaz: `npm test`, `npm run typecheck` y `npm run build` desde `frontend/`. Para anchos y teclado en Chromium: `npx playwright install chromium` una vez y `npm run test:browser`. CI instala el navegador, ejecuta esas pruebas y el build junto a la suite backend. `GET /api/v1/management/metrics` da contadores de eventos, estados de entrega e intentos y duración media de intento, siempre para la organización autenticada. La API registra ID de petición, ruta, estado y duración; el worker registra IDs de organización, evento, entrega e intento. Los logs no incluyen cabeceras ni cuerpos y Compose desactiva el access log genérico de Uvicorn.
 
 ## Receptor externo de la demo (P-11)
 
