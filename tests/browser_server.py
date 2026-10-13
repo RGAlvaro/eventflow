@@ -59,6 +59,7 @@ def seed() -> tuple[FastAPI, dict[uuid.UUID, str]]:
     try:
         with Session(engine) as session, session.begin():
             session.add(Organization(id=organization_id, name="Browser demo fixture"))
+            session.flush()
             session.add(
                 Operator(
                     id=uuid.uuid4(),
@@ -82,6 +83,7 @@ def seed() -> tuple[FastAPI, dict[uuid.UUID, str]]:
                         signing_secret_version=1,
                     )
                 )
+                session.flush()
                 session.add(
                     Subscription(
                         id=uuid.uuid4(),
