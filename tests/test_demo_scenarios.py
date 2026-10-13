@@ -99,16 +99,18 @@ async def test_demo_scenario_requires_session_csrf_tenant_and_exact_subscription
             event_id = uuid.UUID(accepted.json()["event_id"])
             delivery_id = uuid.UUID(accepted.json()["delivery_id"])
             async with engine.connect() as connection:
-                event = await connection.scalar(select(Event).where(Event.id == event_id))
-                delivery = await connection.scalar(
-                    select(Delivery).where(Delivery.id == delivery_id)
+                event_tenant = await connection.scalar(
+                    select(Event.organization_id).where(Event.id == event_id)
                 )
-                outbox = await connection.scalar(
-                    select(OutboxMessage).where(OutboxMessage.delivery_id == delivery_id)
+                delivery_endpoint = await connection.scalar(
+                    select(Delivery.endpoint_id).where(Delivery.id == delivery_id)
                 )
-                assert event is not None and event.organization_id == tenant
-                assert delivery is not None and delivery.endpoint_id == endpoint_id
-                assert outbox is not None
+                outbox_id = await connection.scalar(
+                    select(OutboxMessage.id).where(OutboxMessage.delivery_id == delivery_id)
+                )
+                assert event_tenant == tenant
+                assert delivery_endpoint == endpoint_id
+                assert outbox_id is not None
             summary = await client.get("/api/v1/management/metrics")
             assert summary.status_code == 200
             assert summary.json()["events"] == 1
