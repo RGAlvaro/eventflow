@@ -49,7 +49,11 @@ export type Metrics = {
 type ApiErrorBody = { code?: string; message?: string }
 
 export class ApiFailure extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
     super(message)
   }
 }
@@ -67,7 +71,11 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const response = await fetch(path, { ...options, headers, credentials: 'same-origin' })
   if (!response.ok) {
     const body: ApiErrorBody = await response.json().catch(() => ({}))
-    throw new ApiFailure(response.status, body.code ?? 'request_failed', body.message ?? 'No se pudo completar la solicitud')
+    throw new ApiFailure(
+      response.status,
+      body.code ?? 'request_failed',
+      body.message ?? 'No se pudo completar la solicitud',
+    )
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>

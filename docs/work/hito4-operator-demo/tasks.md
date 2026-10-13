@@ -9,5 +9,6 @@
   - [x] Conectar controles de UI al frontend React.
 - [x] Añadir API de escenarios con sesión, CSRF, publicación limitada y prueba PostgreSQL/Redis de trabajo atómico y aislamiento; 79 pruebas backend sin omisiones en CI.
 - [x] Añadir logs, métricas y pruebas de redacción; contadores tenant, log seguro y prueba en CI verde.
-- [ ] Construir UI React responsive, pruebas de teclado/anchos y build en CI; interfaz, prueba de interacción y build verdes en CI, pruebas Chromium añadidas después y pendientes de ejecución.
+- [x] Construir UI React responsive, pruebas de teclado/anchos y build en CI; tres anchos y teclado verdes en Chromium.
+- [x] Verificar en Chromium un recorrido real con API, PostgreSQL, Redis, receptor firmado y replay; cuatro pruebas de navegador verdes en CI.
 - [ ] Verificar recorridos E2E y suite completa sin omisiones, revisar fiabilidad, PR verde y merge.
