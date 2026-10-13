@@ -11,6 +11,8 @@ from eventflow.models import (
     EndpointSecretVersion,
     Event,
     ManagementAudit,
+    Operator,
+    OperatorSession,
     Organization,
     OutboxMessage,
     ReplayAudit,
@@ -43,6 +45,8 @@ async def clean_organizations(engine: AsyncEngine, organization_ids: list[uuid.U
             EndpointSecretVersion,
             Endpoint,
             ApiKey,
+            OperatorSession,
+            Operator,
         ):
             await connection.execute(
                 delete(model).where(model.organization_id.in_(organization_ids))

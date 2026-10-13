@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import uuid
 
@@ -18,6 +19,7 @@ from eventflow.ingest import (
 from eventflow.ingest_limits import admit_ingest
 
 router = APIRouter(prefix="/api/v1")
+logger = logging.getLogger("eventflow.ingest")
 
 
 class ApiError(Exception):
@@ -121,6 +123,12 @@ async def publish_event(request: Request) -> dict[str, str]:
                 "Organization delivery capacity exhausted",
                 {"Retry-After": "5"},
             ) from None
+    logger.info(
+        "event_accepted request_id=%s organization_id=%s event_id=%s",
+        request.state.request_id,
+        organization_id,
+        event_id,
+    )
     return {"event_id": str(event_id), "request_id": str(request.state.request_id)}
 
 

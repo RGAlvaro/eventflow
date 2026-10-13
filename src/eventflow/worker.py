@@ -17,7 +17,11 @@ from eventflow.delivery import (
     make_sync_engine,
     reconcile_deliveries,
 )
-from eventflow.retention import purge_expired_secret_versions, purge_terminal_events
+from eventflow.retention import (
+    purge_expired_operator_sessions,
+    purge_expired_secret_versions,
+    purge_terminal_events,
+)
 from eventflow.secrets import SecretUnavailable
 from eventflow.webhook import UnsafeDestination, send_webhook
 
@@ -73,10 +77,13 @@ def deliver(delivery_id: str) -> None:
             signal.signal(signal.SIGALRM, old_handler)
         finish_delivery(engine, claim, response_status, error, retry_after)
         logger.info(
-            "delivery_attempt_completed organization_id=%s delivery_id=%s attempt_id=%s status=%s",
+            "delivery_attempt_completed organization_id=%s event_id=%s delivery_id=%s "
+            "attempt_id=%s generation=%s status=%s",
             claim.organization_id,
+            claim.event_id,
             claim.delivery_id,
             claim.attempt_id,
+            claim.generation,
             response_status if response_status is not None else error,
         )
     finally:
@@ -96,6 +103,7 @@ def run_dispatcher(once: bool = False) -> None:
                 reconcile_deliveries(engine, publish)
                 purge_terminal_events(engine)
                 purge_expired_secret_versions(engine)
+                purge_expired_operator_sessions(engine)
             except Exception:
                 logger.error("dispatcher_cycle_failed")
                 if once:

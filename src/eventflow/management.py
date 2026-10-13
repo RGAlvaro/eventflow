@@ -3,6 +3,7 @@
 import base64
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
@@ -26,6 +27,7 @@ from eventflow.models import (
     ReplayAudit,
     Subscription,
 )
+from eventflow.operator_session import authenticated_session
 from eventflow.secrets import SecretUnavailable, encrypt_secret, generate_signing_secret
 from eventflow.webhook import UnsafeDestination, validated_destination
 
@@ -34,6 +36,13 @@ MAX_KEYS = 10
 MAX_ENDPOINTS = 20
 MAX_SUBSCRIPTIONS = 100
 EVENT_TYPE = r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+
+
+@dataclass(frozen=True)
+class ManagementPrincipal:
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    source: Literal["key", "operator"]
 
 
 class KeyRequest(BaseModel):
@@ -69,18 +78,25 @@ def bearer_key(request: Request) -> str:
     return key
 
 
-async def management_actor(session: AsyncSession, request: Request, lock: bool = False) -> ApiKey:
-    query = select(ApiKey).where(
-        ApiKey.key_hash == hash_api_key(bearer_key(request)),
-        ApiKey.scope == "manage",
-        ApiKey.revoked_at.is_(None),
+async def management_actor(
+    session: AsyncSession, request: Request, lock: bool = False
+) -> ManagementPrincipal:
+    if "authorization" in request.headers:
+        query = select(ApiKey).where(
+            ApiKey.key_hash == hash_api_key(bearer_key(request)),
+            ApiKey.scope == "manage",
+            ApiKey.revoked_at.is_(None),
+        )
+        if lock:
+            query = query.with_for_update()
+        actor = await session.scalar(query)
+        if actor is None:
+            raise ApiError(401, "unauthorized", "A valid management API key is required")
+        return ManagementPrincipal(actor.id, actor.organization_id, "key")
+    identity, _ = await authenticated_session(
+        session, request, csrf=request.method not in ("GET", "HEAD", "OPTIONS"), lock=lock
     )
-    if lock:
-        query = query.with_for_update()
-    actor = await session.scalar(query)
-    if actor is None:
-        raise ApiError(401, "unauthorized", "A valid management API key is required")
-    return actor
+    return ManagementPrincipal(identity.id, identity.organization_id, "operator")
 
 
 async def lock_organization(session: AsyncSession, organization_id: uuid.UUID) -> None:
@@ -91,11 +107,12 @@ async def lock_organization(session: AsyncSession, organization_id: uuid.UUID) -
         raise ApiError(401, "unauthorized", "Organization is unavailable")
 
 
-def audit(actor: ApiKey, action: str, subject_id: uuid.UUID) -> ManagementAudit:
+def audit(actor: ManagementPrincipal, action: str, subject_id: uuid.UUID) -> ManagementAudit:
     return ManagementAudit(
         id=uuid.uuid4(),
         organization_id=actor.organization_id,
-        actor_key_id=actor.id,
+        actor_key_id=actor.id if actor.source == "key" else None,
+        actor_operator_id=actor.id if actor.source == "operator" else None,
         action=action,
         subject_id=subject_id,
     )
@@ -553,7 +570,8 @@ async def replay(request: Request, delivery_id: uuid.UUID) -> dict[str, int | st
                 id=uuid.uuid4(),
                 organization_id=actor.organization_id,
                 delivery_id=delivery.id,
-                actor_key_id=actor.id,
+                actor_key_id=actor.id if actor.source == "key" else None,
+                actor_operator_id=actor.id if actor.source == "operator" else None,
                 generation=delivery.generation,
             )
         )

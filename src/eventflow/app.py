@@ -1,3 +1,5 @@
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -10,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from eventflow.api import ApiError, new_request_id, router
 from eventflow.config import get_settings
 from eventflow.db import make_engine
+from eventflow.demo_observations import router as demo_observations_router
+from eventflow.demo_scenarios import router as demo_scenarios_router
 from eventflow.management import router as management_router
+from eventflow.metrics import router as metrics_router
+from eventflow.observations import router as observations_router
+from eventflow.operator_session import router as session_router
 
 
 async def dependency_status(engine: AsyncEngine, redis: Redis) -> dict[str, str]:
@@ -41,13 +48,43 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="EventFlow", lifespan=lifespan)
 app.include_router(router)
 app.include_router(management_router)
+app.include_router(observations_router)
+app.include_router(demo_observations_router)
+app.include_router(demo_scenarios_router)
+app.include_router(session_router)
+app.include_router(metrics_router)
+
+logger = logging.getLogger("eventflow.api")
 
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
     request.state.request_id = new_request_id()
-    response = await call_next(request)
+    started = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        route_path = getattr(request.scope.get("route"), "path", "unmatched")
+        logger.error(
+            "request_failed request_id=%s method=%s path=%s duration_ms=%.1f",
+            request.state.request_id,
+            request.method,
+            route_path,
+            (time.monotonic() - started) * 1000,
+        )
+        raise
+    route_path = getattr(request.scope.get("route"), "path", "unmatched")
+    logger.info(
+        "request_completed request_id=%s method=%s path=%s status=%s duration_ms=%.1f",
+        request.state.request_id,
+        request.method,
+        route_path,
+        response.status_code,
+        (time.monotonic() - started) * 1000,
+    )
     response.headers["X-Request-Id"] = str(request.state.request_id)
+    if request.url.path.startswith(("/api/v1/management", "/api/v1/session")):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 

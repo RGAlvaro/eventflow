@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     local_test_receiver_url: str | None = None
     encryption_keys: str | None = None
     active_encryption_key_id: str | None = None
+    demo_receiver_bridge_config_path: str | None = None
 
 
 @lru_cache
