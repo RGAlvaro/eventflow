@@ -1,8 +1,8 @@
 # Hoja de ruta de implementación
 
-Este archivo define el **plan** y las puertas de los hitos. El avance actual se registra en [project-state.md](project-state.md); la actividad histórica, en [implementation-log.md](implementation-log.md). Evita añadir aquí estados diarios.
+Este archivo define el **plan** y las puertas de los hitos. Evita añadir aquí estados diarios.
 
-El resultado que guía los hitos es **aceptar un evento y entregar un webhook firmado con estado recuperable**, y demostrarlo desde una interfaz usable en un VPS Ubuntu 24.04 LTS. Cada corte grande usa `eventflow-slice` y enlaza requisitos EF con pruebas. Un bug acotado solo necesita causa, cambio y verificación. Los hitos 0–3 consolidan el núcleo backend antes de construir la interfaz; los hitos 4–6 completan operación, UI, rendimiento y despliegue del MVP. La gestión completa de miembros/roles queda fuera del MVP. El aislamiento por organización se mantiene desde el primer corte.
+El resultado que guía los hitos es **aceptar un evento y entregar un webhook firmado con estado recuperable**, y demostrarlo desde una interfaz usable en un VPS Ubuntu 24.04 LTS. Cada corte grande enlaza requisitos EF con pruebas. Un bug acotado solo necesita causa, cambio y verificación. Los hitos 0–3 consolidan el núcleo backend antes de construir la interfaz; los hitos 4–6 completan operación, UI, rendimiento y despliegue del MVP. La gestión completa de miembros/roles queda fuera del MVP. El aislamiento por organización se mantiene desde el primer corte.
 
 ## Hito 0 — Base backend reproducible
 

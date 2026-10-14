@@ -4,6 +4,17 @@
 !.env.example
 .codex/config.toml
 
+# Guías y notas personales de trabajo
+AGENTS.md
+.agents/skills/
+docs/harness-evals.md
+docs/harness-workflow.md
+docs/implementation-log.md
+docs/project-state.md
+docs/research.md
+docs/source/
+docs/work/private-local-guides/
+
 # Python
 __pycache__/
 *.py[cod]
