@@ -1,6 +1,6 @@
 # Desarrollo local y verificaciones
 
-Esta guía reúne los comandos operativos del repositorio. `AGENTS.md` y la skill `eventflow-slice` la enlazan para que un agente pueda trabajar y verificar cambios sin usar `README.md` como instrucción.
+Esta guía reúne los comandos operativos del repositorio para instalar, ejecutar y verificar EventFlow.
 
 ## Requisitos y arranque del backend
 
